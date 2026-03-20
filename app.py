@@ -756,39 +756,11 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
 
 
 def reserve_order_materials(cursor, order_id):
-    cursor.execute("""
-        SELECT product_id, quantity, materials_reserved
-        FROM orders
-        WHERE id = ?
-    """, (order_id,))
-    row = cursor.fetchone()
-
-    if row is None:
-        return False
-
-    product_id = row[0]
-    order_quantity = float(row[1] or 0)
-    materials_reserved = int(row[2] or 0)
-
-    if not product_id or materials_reserved == 1:
-        return False
-
-    exploded_items = explode_bom_items_recursive(cursor, product_id, order_quantity)
-
-    for item_id, required_quantity in exploded_items.items():
-        cursor.execute("""
-            UPDATE items
-            SET stock_quantity = stock_quantity - ?
-            WHERE id = ?
-        """, (required_quantity, item_id))
-
-    cursor.execute("""
-        UPDATE orders
-        SET materials_reserved = 1
-        WHERE id = ?
-    """, (order_id,))
-
-    return True
+    """
+    Orders no longer affect inventory.
+    This function is kept only for compatibility.
+    """
+    return False
 
 
 def calculate_product_material_cost(cursor, product_id):
@@ -1116,12 +1088,54 @@ def new_order():
     cursor = conn.cursor()
 
     if request.method == "POST":
-        order_number = request.form["order_number"]
-        product_id = request.form["product_id"]
-        quantity = float(request.form["quantity"])
-        status = request.form["status"]
-        due_date = request.form["due_date"]
-        priority = request.form["priority"]
+        order_number = request.form.get("order_number", "").strip()
+        product_id = request.form.get("product_id", "").strip()
+        quantity_raw = request.form.get("quantity", "").strip()
+        status = request.form.get("status", "").strip()
+        due_date = request.form.get("due_date", "").strip()
+        priority = request.form.get("priority", "").strip()
+
+        if not order_number:
+            conn.close()
+            flash("Order number is required.", "error")
+            return redirect(url_for("new_order"))
+
+        if not product_id:
+            conn.close()
+            flash("Product is required.", "error")
+            return redirect(url_for("new_order"))
+
+        if not quantity_raw:
+            conn.close()
+            flash("Quantity is required.", "error")
+            return redirect(url_for("new_order"))
+
+        try:
+            quantity = float(quantity_raw)
+        except ValueError:
+            conn.close()
+            flash("Quantity must be a valid number.", "error")
+            return redirect(url_for("new_order"))
+
+        if quantity <= 0:
+            conn.close()
+            flash("Quantity must be greater than 0.", "error")
+            return redirect(url_for("new_order"))
+
+        if not status:
+            conn.close()
+            flash("Status is required.", "error")
+            return redirect(url_for("new_order"))
+
+        if not due_date:
+            conn.close()
+            flash("Due date is required.", "error")
+            return redirect(url_for("new_order"))
+
+        if not priority:
+            conn.close()
+            flash("Priority is required.", "error")
+            return redirect(url_for("new_order"))
 
         cursor.execute("""
             INSERT INTO orders (order_number, customer, product_id, quantity, status, due_date, priority)
@@ -2304,7 +2318,7 @@ def delete_workstation(workstation_id):
     return redirect(url_for("workstations"))
 
 
-@app.route("/jobs")
+
 @app.route("/jobs")
 def jobs():
     if not is_logged_in():
@@ -2315,12 +2329,15 @@ def jobs():
     job_name = request.args.get("job_name", "").strip()
     workstation = request.args.get("workstation", "").strip()
     workstation_text = request.args.get("workstation_text", "").strip()
-
-    statuses = request.args.getlist("status")
-    statuses = [s.strip() for s in statuses if s.strip()]
-
     due_date_from = request.args.get("due_date_from", "").strip()
     due_date_to = request.args.get("due_date_to", "").strip()
+
+    selected_statuses = request.args.getlist("status")
+    selected_statuses = [s.strip() for s in selected_statuses if s.strip()]
+
+    statuses = selected_statuses[:]
+    if "All" in statuses:
+        statuses = []
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -2377,9 +2394,6 @@ def jobs():
     if workstation_text:
         conditions.append("w.name LIKE ?")
         params.append(f"%{workstation_text}%")
-
-    if "All" in statuses:
-        statuses = []
 
     if statuses:
         placeholders = ",".join("?" for _ in statuses)
@@ -2456,7 +2470,7 @@ def jobs():
         "job_name": job_name,
         "workstation": workstation,
         "workstation_text": workstation_text,
-        "status": statuses,
+        "status": selected_statuses,
         "due_date_from": due_date_from,
         "due_date_to": due_date_to
     }
@@ -2652,15 +2666,17 @@ def inventory():
     total_items_value = 0
 
     for row in item_rows:
-        stock_quantity = row[5] if row[5] is not None else 0
-        unit_price = row[4] if row[4] is not None else 0
-        min_stock = row[6] if row[6] is not None else 0
-        stock_value = stock_quantity * unit_price
+        real_stock_quantity = float(row[5] or 0)
+        display_stock_quantity = max(0, real_stock_quantity)
+        unit_price = float(row[4] or 0)
+        min_stock = float(row[6] or 0)
+
+        stock_value = display_stock_quantity * unit_price
         total_items_value += stock_value
 
-        if stock_quantity <= 0:
+        if real_stock_quantity <= 0:
             stock_status = "Out"
-        elif stock_quantity <= min_stock:
+        elif real_stock_quantity <= min_stock:
             stock_status = "Low"
         else:
             stock_status = "OK"
@@ -2671,7 +2687,8 @@ def inventory():
             "item_name": row[2],
             "measurement_unit": row[3],
             "unit_price": unit_price,
-            "stock_quantity": stock_quantity,
+            "stock_quantity": display_stock_quantity,
+            "real_stock_quantity": real_stock_quantity,
             "min_stock": min_stock,
             "stock_value": stock_value,
             "stock_status": stock_status
@@ -2694,9 +2711,9 @@ def inventory():
 
     for row in product_rows:
         product_id = row[0]
-        stock_quantity = row[4] if row[4] is not None else 0
-        material_cost_per_unit = calculate_product_material_cost(cursor, product_id)
-        stock_value = stock_quantity * material_cost_per_unit
+        stock_quantity = float(row[4] or 0)
+        material_cost_per_unit = float(calculate_product_material_cost(cursor, product_id) or 0)
+        stock_value = max(0, stock_quantity) * material_cost_per_unit
         total_products_value += stock_value
 
         products_inventory.append({
@@ -2704,7 +2721,8 @@ def inventory():
             "product_code": row[1],
             "product_name": row[2],
             "measurement_unit": row[3],
-            "stock_quantity": stock_quantity,
+            "stock_quantity": max(0, stock_quantity),
+            "real_stock_quantity": stock_quantity,
             "material_cost_per_unit": material_cost_per_unit,
             "stock_value": stock_value
         })
@@ -2727,6 +2745,7 @@ def add_item_stock(item_id):
         return redirect(url_for("login"))
 
     add_quantity = float(request.form.get("add_quantity", 0) or 0)
+    
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -2774,29 +2793,96 @@ def materials_shortage():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT id, item_code, item_name, measurement_unit, stock_quantity, min_stock
-        FROM items
-        WHERE stock_quantity < 0
-        ORDER BY stock_quantity ASC
+        SELECT
+            id,
+            product_id,
+            quantity,
+            order_number,
+            status
+        FROM orders
+        WHERE product_id IS NOT NULL
+          AND status IN ('Waiting', 'In Progress', 'Delayed')
+        ORDER BY id DESC
     """)
-    rows = cursor.fetchall()
-    conn.close()
+    order_rows = cursor.fetchall()
+
+    required_by_item = {}
+
+    for order_id, product_id, order_quantity, order_number, status in order_rows:
+        if not product_id:
+            continue
+
+        try:
+            exploded_items = explode_bom_items_recursive(
+                cursor,
+                product_id,
+                float(order_quantity or 0)
+            )
+        except ValueError:
+            continue
+
+        for item_id, required_qty in exploded_items.items():
+            if item_id not in required_by_item:
+                required_by_item[item_id] = 0
+            required_by_item[item_id] += float(required_qty or 0)
 
     shortage_items = []
-    for row in rows:
-        stock_qty = float(row[4] or 0)
-        min_stock = float(row[5] or 0)
-        shortage_items.append({
-            "id": row[0],
-            "item_code": row[1],
-            "item_name": row[2],
-            "unit": row[3],
-            "stock_quantity": stock_qty,
-            "min_stock": min_stock,
-            "required": abs(stock_qty) + min_stock
-        })
 
-    return render_template("materials_shortage.html", shortage_items=shortage_items, active_page="shortage")
+    if required_by_item:
+        item_ids = list(required_by_item.keys())
+        placeholders = ",".join(["?"] * len(item_ids))
+
+        cursor.execute(f"""
+            SELECT
+                id,
+                item_code,
+                item_name,
+                measurement_unit,
+                unit_price,
+                stock_quantity,
+                min_stock
+            FROM items
+            WHERE id IN ({placeholders})
+            ORDER BY item_name ASC
+        """, item_ids)
+        rows = cursor.fetchall()
+
+        for row in rows:
+            item_id = row[0]
+            item_code = row[1]
+            item_name = row[2]
+            measurement_unit = row[3]
+            unit_price = float(row[4] or 0)
+            stock_quantity = float(row[5] or 0)
+            min_stock = float(row[6] or 0)
+
+            required_quantity = float(required_by_item.get(item_id, 0))
+            available_stock = max(0, stock_quantity)
+
+            required_to_order = max(0, required_quantity - available_stock)
+
+            if required_to_order > 0:
+                shortage_items.append({
+                    "id": item_id,
+                    "item_code": item_code,
+                    "item_name": item_name,
+                    "unit": measurement_unit,
+                    "stock_quantity": available_stock,
+                    "real_stock_quantity": stock_quantity,
+                    "min_stock": min_stock,
+                    "required_quantity": required_quantity,
+                    "required_to_order": required_to_order,
+                    "shortage_value": required_to_order * unit_price,
+                    "status": "Out of stock" if available_stock <= 0 else "Below required"
+                })
+
+    conn.close()
+
+    return render_template(
+        "materials_shortage.html",
+        shortage_items=shortage_items,
+        active_page="shortage"
+    )
 
 
 @app.route("/planner")
