@@ -754,6 +754,50 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
 
     return collected
 
+def consume_job_materials(cursor, product_id, produced_quantity):
+    produced_quantity = float(produced_quantity or 0)
+
+    if not product_id or produced_quantity <= 0:
+        return
+
+    exploded_items = explode_bom_items_recursive(cursor, product_id, produced_quantity)
+
+    for item_id, required_quantity in exploded_items.items():
+        cursor.execute("""
+            UPDATE items
+            SET stock_quantity = COALESCE(stock_quantity, 0) - ?
+            WHERE id = ?
+        """, (float(required_quantity or 0), item_id))
+
+def add_finished_product_stock(cursor, product_id, produced_quantity):
+    produced_quantity = float(produced_quantity or 0)
+
+    if not product_id or produced_quantity <= 0:
+        return
+
+    cursor.execute("""
+        UPDATE products
+        SET stock_quantity = COALESCE(stock_quantity, 0) + ?
+        WHERE id = ?
+    """, (produced_quantity, product_id))
+
+def is_final_job(cursor, order_id, job_id):
+    cursor.execute("""
+        SELECT MAX(sequence)
+        FROM order_jobs
+        WHERE order_id = ?
+    """, (order_id,))
+    max_sequence = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT sequence
+        FROM order_jobs
+        WHERE id = ?
+    """, (job_id,))
+    job_sequence = cursor.fetchone()[0]
+
+    return job_sequence == max_sequence
+
 
 def reserve_order_materials(cursor, order_id):
     """
@@ -2523,7 +2567,13 @@ def update_job_status(job_id, new_status):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT order_id, parent_job_id
+        SELECT
+            order_id,
+            parent_job_id,
+            job_product_id,
+            planned_quantity,
+            completed_quantity,
+            status
         FROM order_jobs
         WHERE id = ?
     """, (job_id,))
@@ -2536,6 +2586,10 @@ def update_job_status(job_id, new_status):
 
     order_id = row[0]
     parent_job_id = row[1]
+    job_product_id = row[2]
+    planned_quantity = float(row[3] or 0)
+    completed_quantity = float(row[4] or 0)
+    current_status = row[5]
 
     if new_status == "Ongoing":
         if not can_start_job(cursor, job_id):
@@ -2545,29 +2599,44 @@ def update_job_status(job_id, new_status):
 
         reserve_order_materials(cursor, order_id)
 
-    cursor.execute("""
-        UPDATE order_jobs
-        SET status = ?
-        WHERE id = ?
-    """, (new_status, job_id))
-
-    if new_status == "Done":
         cursor.execute("""
-            SELECT planned_quantity
-            FROM order_jobs
+            UPDATE order_jobs
+            SET status = ?
             WHERE id = ?
-        """, (job_id,))
-        qty_row = cursor.fetchone()
+        """, (new_status, job_id))
 
-        if qty_row:
-            planned_quantity = float(qty_row[0] or 0)
-            cursor.execute("""
-                UPDATE order_jobs
-                SET completed_quantity = ?
-                WHERE id = ?
-            """, (planned_quantity, job_id))
+    elif new_status == "Done":
+        quantity_to_finish = planned_quantity - completed_quantity
+        if quantity_to_finish < 0:
+            quantity_to_finish = 0
 
-    recalculate_job_dates(cursor, job_id)
+        if current_status != "Done" and quantity_to_finish > 0:
+            try:
+                # 1. nurašom medžiagas
+                consume_job_materials(cursor, job_product_id, quantity_to_finish)
+
+                # 2. tik jei tai FINAL job → pridedam produktą
+                if is_final_job(cursor, order_id, job_id):
+                    add_finished_product_stock(cursor, job_product_id, quantity_to_finish)
+
+            except ValueError as e:
+                conn.rollback()
+                conn.close()
+                flash(str(e), "error")
+                return redirect_back("jobs")
+
+        cursor.execute("""
+            UPDATE order_jobs
+            SET status = ?, completed_quantity = ?
+            WHERE id = ?
+        """, ("Done", planned_quantity, job_id))
+
+    else:
+        cursor.execute("""
+            UPDATE order_jobs
+            SET status = ?
+            WHERE id = ?
+        """, (new_status, job_id))
 
     if parent_job_id:
         sync_parent_job_status(cursor, parent_job_id)
@@ -2578,7 +2647,7 @@ def update_job_status(job_id, new_status):
     conn.close()
 
     flash("Job status updated.", "success")
-    return redirect_back("jobs")
+    return redirect(request.referrer or url_for("jobs"))
 
 
 @app.route("/jobs/update_progress/<int:job_id>", methods=["POST"])
