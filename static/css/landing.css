@@ -2368,3 +2368,8 @@ a {
 .hero-section{
     margin-top: -70px;
 }
+#product,
+#workflow,
+#pricing {
+    scroll-margin-top: 110px;
+}
