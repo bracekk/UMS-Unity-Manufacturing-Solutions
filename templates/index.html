@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UMS | Manufacturing control without ERP chaos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}" />
+</head>
+<body class="landing-body">
+  <header class="landing-header">
+    <div class="landing-container landing-header-inner">
+      <a href="{{ url_for('home') }}" class="landing-logo">
+        <span class="landing-logo-u">U</span><span class="landing-logo-m">M</span><span class="landing-logo-s">S</span>
+      </a>
+
+      <nav class="landing-nav">
+        <a href="#product">Product</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#pricing">Pricing</a>
+      </nav>
+
+      <div class="landing-header-actions">
+        {% if session.get('user_id') %}
+          <a href="{{ url_for('dashboard') }}" class="landing-btn landing-btn-secondary">Workspace</a>
+          <a href="{{ url_for('logout') }}" class="landing-btn landing-btn-ghost">Logout</a>
+        {% else %}
+          <a href="{{ url_for('login') }}" class="landing-btn landing-btn-ghost">Login</a>
+          <a href="{{ url_for('register') }}" class="landing-btn landing-btn-primary">Create Account</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="landing-main">
+    <section class="hero-section">
+      <div class="landing-container hero-grid">
+        <div class="hero-copy">
+          <span class="landing-badge">Manufacturing workspace for small teams</span>
+          <h1>Clear production control without bloated ERP complexity.</h1>
+          <p class="hero-text">
+            UMS helps small manufacturers manage orders, jobs, BOMs, stock, workstation load and planning
+            inside one connected system built around real workshop flow.
+          </p>
+
+          <div class="hero-actions">
+            {% if session.get('user_id') %}
+              <a href="{{ url_for('dashboard') }}" class="landing-btn landing-btn-primary">Open Workspace</a>
+            {% else %}
+              <a href="{{ url_for('register') }}" class="landing-btn landing-btn-primary">Start Free</a>
+            {% endif %}
+            <a href="#pricing" class="landing-btn landing-btn-secondary">See Pricing</a>
+          </div>
+
+          <div class="hero-metrics">
+            <div class="hero-metric">
+              <strong>Orders</strong>
+              <span>Track production commitments in one place</span>
+            </div>
+            <div class="hero-metric">
+              <strong>Planner</strong>
+              <span>Schedule work visually by workstation</span>
+            </div>
+            <div class="hero-metric">
+              <strong>Capacity</strong>
+              <span>See workload before delivery dates slip</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-visual-shell">
+          <div class="hero-visual-panel">
+            <div class="hero-panel-top">
+              <span class="hero-panel-kicker">Workspace preview</span>
+              <span class="hero-live-pill">Live operations view</span>
+            </div>
+
+            <div class="hero-visual-grid">
+              <article class="hero-main-card">
+                <div class="hero-card-head">
+                  <h3>Production board</h3>
+                  <span class="mini-status">Today</span>
+                </div>
+
+                <div class="hero-order-table">
+                  <div class="hero-order-head">
+                    <span>Order</span>
+                    <span>Status</span>
+                    <span>Due</span>
+                  </div>
+
+                  <div class="hero-order-row">
+                    <strong>ORD-1042</strong>
+                    <span class="hero-status hero-status-progress">Ongoing</span>
+                    <span>12 Sep</span>
+                  </div>
+
+                  <div class="hero-order-row">
+                    <strong>ORD-1043</strong>
+                    <span class="hero-status hero-status-waiting">Waiting</span>
+                    <span>14 Sep</span>
+                  </div>
+
+                  <div class="hero-order-row">
+                    <strong>ORD-1045</strong>
+                    <span class="hero-status hero-status-risk">Risk</span>
+                    <span>11 Sep</span>
+                  </div>
+                </div>
+              </article>
+
+              <div class="hero-side-stack">
+                <article class="hero-side-card">
+                  <h4>Workstation load</h4>
+                  <ul class="hero-side-list">
+                    <li><span>CNC 01</span><strong>Busy</strong></li>
+                    <li><span>CNC 02</span><strong>Busy</strong></li>
+                    <li><span>Assembly</span><strong>Open</strong></li>
+                    <li><span>Finishing</span><strong>Busy</strong></li>
+                  </ul>
+                </article>
+
+                <article class="hero-side-card">
+                  <h4>Material alerts</h4>
+                  <ul class="hero-side-list">
+                    <li><span>Steel Tube 40x40</span><strong>Low</strong></li>
+                    <li><span>Powder Coat Black</span><strong>Low</strong></li>
+                    <li><span>M8 Fasteners</span><strong>OK</strong></li>
+                  </ul>
+                </article>
+              </div>
+            </div>
+
+            <div class="hero-floating-note">
+              Planner visibility, workstation load and stock risk live in one system.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="why-section why-orbit-section">
+
+      <div class="container">
+
+        <div class="section-header">
+          <span class="section-tag">WHY UMS</span>
+
+          <h2 class="section-title">
+            Built around real workshop flow,<br>
+            not generic admin screens.
+          </h2>
+
+          <p class="section-subtitle">
+            UMS is for smaller manufacturing teams that need daily operational clarity 
+            without the complexity cost of heavyweight ERP platforms.
+          </p>
+        </div>
+
+        <div class="features-grid why-grid">
+
+          <!-- 1 -->
+          <div class="feature-card orbit-card">
+            <div class="feature-icon">
+             <img src="{{ url_for('static', filename='images/icons/bom.png') }}" alt="">
+            </div>
+            <h3>Production visibility</h3>
+            <p>
+              See what is active, delayed, blocked or waiting without stitching together 
+              spreadsheets and chat messages.
+            </p>
+          </div>
+
+          <!-- 2 -->
+          <div class="feature-card orbit-card">
+            <div class="feature-icon">
+              <img src="{{ url_for('static', filename='images/icons/capacity.png') }}" alt="">
+            </div>
+            <h3>Workstation load</h3>
+            <p>
+              Understand machine and workstation pressure before overload turns into 
+              missed delivery dates.
+            </p>
+          </div>
+
+          <!-- 3 -->
+          <div class="feature-card orbit-card">
+            <div class="feature-icon">
+              <img src="{{ url_for('static', filename='images/icons/inventory.png') }}" alt="">
+            </div>
+            <h3>Inventory risk</h3>
+            <p>
+              Identify low stock and shortages earlier so purchasing and execution stay aligned.
+            </p>
+          </div>
+
+          <!-- 4 -->
+          <div class="feature-card orbit-card">
+            <div class="feature-icon">
+              <img src="{{ url_for('static', filename='images/icons/orders.png') }}" alt="">
+            </div>
+            <h3>Order execution</h3>
+            <p>
+              Turn orders into real jobs, sequencing and planning decisions instead of relying on memory.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <section class="landing-section">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-badge">Core capabilities</span>
+          <h2>One connected system for production control.</h2>
+          <p>
+            Orders, BOMs, inventory, jobs, planner and workstation load work together inside one operational workspace.
+          </p>
+        </div>
+
+        <section class="capabilities-orbit-section">
+          <div class="system-core-glow"></div>
+
+          <div class="features-grid">
+            <div class="feature-card orbit-card" style="--orbit-index:0;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/orders.png') }}" alt="">
+              </div>
+              <h3>Orders with production context</h3>
+              <p>Keep delivery commitments connected to products, quantities, due dates and real production progress.</p>
+            </div>
+
+            <div class="feature-card orbit-card" style="--orbit-index:1;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/jobs.png') }}" alt="">
+              </div>
+              <h3>Jobs and routing</h3>
+              <p>Define product routing, generate jobs automatically and manage execution at workstation level.</p>
+            </div>
+
+            <div class="feature-card orbit-card" style="--orbit-index:2;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/planner.png') }}" alt="">
+              </div>
+              <h3>Planner by workstation</h3>
+              <p>Move work visually, see monthly timelines and keep scheduling decisions closer to reality.</p>
+            </div>
+
+            <div class="feature-card orbit-card" style="--orbit-index:3;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/inventory.png') }}" alt="">
+              </div>
+              <h3>Inventory and shortage visibility</h3>
+              <p>Track stock levels, inventory value and materials that need replenishment before work gets blocked.</p>
+            </div>
+
+            <div class="feature-card orbit-card" style="--orbit-index:4;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/capacity.png') }}" alt="">
+              </div>
+              <h3>Workstation capacity</h3>
+              <p>Measure load against monthly capacity and identify where production pressure is building up.</p>
+            </div>
+
+            <div class="feature-card orbit-card" style="--orbit-index:5;">
+              <div class="feature-icon">
+                <img src="{{ url_for('static', filename='images/icons/bom.png') }}" alt="">
+              </div>
+              <h3>Product structure and costing</h3>
+              <p>Manage BOMs, sub-products, routing steps and material cost visibility from the same system.</p>
+            </div>
+          </div>
+        </section>
+    </section>
+
+    <section class="landing-section" id="workflow">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-badge">Workflow</span>
+          <h2>How teams use UMS day to day.</h2>
+          <p>
+            The system is built around a simple operational loop: structure the product, create work, then execute with visibility.
+          </p>
+        </div>
+
+        <div class="workflow-grid">
+          <article class="workflow-card">
+            <div class="workflow-step">1</div>
+            <h3>Build your structure</h3>
+            <p>Set up products, BOMs, items, workstations and job templates around your actual shop-floor process.</p>
+          </article>
+
+          <article class="workflow-card">
+            <div class="workflow-step">2</div>
+            <h3>Plan real work</h3>
+            <p>Create manufacturing orders and translate them into dates, jobs, workstation load and material requirements.</p>
+          </article>
+
+          <article class="workflow-card">
+            <div class="workflow-step">3</div>
+            <h3>Stay in control</h3>
+            <p>Use the workspace daily to monitor progress, update execution and react earlier to operational risk.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section workspace-preview-section">
+      <div class="landing-container workspace-preview-grid">
+        <div class="workspace-preview-copy">
+          <span class="landing-badge">Workspace preview</span>
+          <h2>A product story that matches the actual app direction.</h2>
+          <p>
+            The public landing and the internal workspace now follow the same visual language:
+            dark premium UI, strong hierarchy and a dashboard-first operational structure.
+          </p>
+
+          <ul class="preview-bullets">
+            <li><span class="preview-dot"></span>Daily visibility across orders and jobs</li>
+            <li><span class="preview-dot"></span>Planner and workstation capacity in the same workflow</li>
+            <li><span class="preview-dot"></span>Inventory, BOM and shortage signals tied to execution</li>
+          </ul>
+        </div>
+
+        <div class="workspace-preview-card">
+          <div class="workspace-preview-window">
+            <div class="workspace-preview-bar">
+              <span></span><span></span><span></span>
+            </div>
+
+            <div class="workspace-preview-body">
+              <div class="workspace-preview-sidebar">
+                <div class="workspace-preview-logo">UMS</div>
+                <div class="workspace-preview-nav">
+                  <span class="active">Dashboard</span>
+                  <span>Orders</span>
+                  <span>Jobs</span>
+                  <span>Planner</span>
+                  <span>Workstations</span>
+                </div>
+              </div>
+
+              <div class="workspace-preview-content">
+                <div class="workspace-preview-stats">
+                  <div></div><div></div><div></div><div></div>
+                </div>
+                <div class="workspace-preview-panels">
+                  <div class="preview-panel-large"></div>
+                  <div class="preview-panel-stack">
+                    <div></div>
+                    <div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <span class="preview-footnote">Aligned with the actual workspace direction</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section" id="pricing">
+      <div class="landing-container">
+        <div class="section-heading">
+          <span class="landing-badge">Pricing</span>
+          <h2>Simple pricing for growing production teams.</h2>
+          <p>
+            Start with the setup that fits your current operation and expand as your workflow becomes more structured.
+          </p>
+        </div>
+
+        <div class="pricing-grid">
+          <article class="pricing-card">
+            <div class="pricing-header">
+              <span class="pricing-name">Starter</span>
+            </div>
+            <h3>For smaller workshops</h3>
+            <div class="pricing-price"><span>€</span><strong>49</strong><span>/month</span></div>
+            <p>For teams that need clearer structure around orders, stock and products.</p>
+            <ul class="pricing-list">
+              <li>Orders and job tracking</li>
+              <li>Products and BOM structure</li>
+              <li>Basic inventory visibility</li>
+              <li>Workstation overview</li>
+            </ul>
+            <a href="{{ url_for('register') }}" class="landing-btn landing-btn-secondary">Get Started</a>
+          </article>
+
+          <article class="pricing-card pricing-card-featured">
+            <div class="pricing-header">
+              <span class="pricing-name">Growth</span>
+              <span class="pricing-badge">Best fit</span>
+            </div>
+            <h3>For teams that need daily control</h3>
+            <div class="pricing-price"><span>€</span><strong>99</strong><span>/month</span></div>
+            <p>Best for manufacturers that want planning, capacity visibility and stronger execution control.</p>
+            <ul class="pricing-list">
+              <li>Everything in Starter</li>
+              <li>Planner and job scheduling</li>
+              <li>Workstation load tracking</li>
+              <li>Shortage visibility</li>
+              <li>Priority support</li>
+            </ul>
+            <a href="{{ url_for('register') }}" class="landing-btn landing-btn-primary">Start Growth</a>
+          </article>
+
+          <article class="pricing-card">
+            <div class="pricing-header">
+              <span class="pricing-name">Custom</span>
+            </div>
+            <h3>For specific workflows</h3>
+            <p>For factories that need a tailored setup, phased onboarding or workflow-specific support.</p>
+            <ul class="pricing-list">
+              <li>Custom onboarding</li>
+              <li>Workflow-specific setup</li>
+              <li>Priority communication</li>
+              <li>Flexible rollout</li>
+            </ul>
+            <a href="{{ url_for('register') }}" class="landing-btn landing-btn-secondary">Contact Sales</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section final-cta-section">
+      <div class="landing-container final-cta-grid">
+        <div class="final-cta-copy">
+          <span class="landing-badge">Start now</span>
+          <h2>Bring more structure to your manufacturing workflow.</h2>
+          <p>
+            UMS is built to make production easier to understand and easier to manage.
+            Start with a cleaner system for orders, jobs, materials and planning.
+          </p>
+
+          <ul class="preview-bullets">
+            <li><span class="preview-dot"></span>Cleaner day-to-day production visibility</li>
+            <li><span class="preview-dot"></span>Better alignment between stock and execution</li>
+            <li><span class="preview-dot"></span>More confidence in planning and deadlines</li>
+          </ul>
+        </div>
+
+        <div class="final-cta-card">
+          <div class="final-cta-form">
+            <label>Name<input type="text" placeholder="Your name" readonly></label>
+            <label>Email<input type="email" placeholder="Your email" readonly></label>
+            <label>Company<input type="text" placeholder="Your company" readonly></label>
+
+            {% if session.get('user_id') %}
+              <a href="{{ url_for('dashboard') }}" class="landing-btn landing-btn-primary landing-btn-full">Open Workspace</a>
+            {% else %}
+              <a href="{{ url_for('register') }}" class="landing-btn landing-btn-primary landing-btn-full">Create Account</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <div class="landing-container landing-footer-inner">
+      <div>
+        <h4>UMS</h4>
+        <p>Unity Manufacturing Solutions</p>
+        <p>Clearer production control for small manufacturing teams.</p>
+      </div>
+
+      <div>
+        <h4>Navigation</h4>
+        <nav>
+          <a href="#product">Product</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#pricing">Pricing</a>
+        </nav>
+      </div>
+
+      <div>
+        <h4>Access</h4>
+        <nav>
+          <a href="{{ url_for('login') }}">Login</a>
+          <a href="{{ url_for('register') }}">Register</a>
+          <a href="{{ url_for('dashboard') }}">Workspace</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="landing-footer-note">© 2026 UMS. All rights reserved.</div>
+  </footer>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+      const orbitSections = document.querySelectorAll(".capabilities-orbit-section, .why-orbit-section");
+      if (!orbitSections.length) return;
+
+      const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+              const section = entry.target;
+
+              if (entry.isIntersecting && !section.dataset.played) {
+                  section.dataset.played = "true";
+                  section.classList.add("orbit-active");
+
+                  setTimeout(() => {
+                      section.classList.remove("orbit-active");
+                  }, 5200);
+              }
+          });
+      }, {
+          threshold: 0.35
+      });
+
+      orbitSections.forEach((section) => observer.observe(section));
+  });
+  </script>
+</body>
+</html>

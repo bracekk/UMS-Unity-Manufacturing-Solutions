@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}UMS | New Item{% endblock %}
+
+{% block content %}
+<div class="jobs-header">
+  <div class="jobs-header-left">
+    <span class="eyebrow-label">Items</span>
+    <h1>New Item</h1>
+    <p>Create a new material, component or part for inventory and BOM usage.</p>
+  </div>
+
+  <div class="jobs-header-right">
+    <a href="{{ url_for('items') }}" class="dashboard-btn secondary">Back to Items</a>
+  </div>
+</div>
+
+<div class="dashboard-form-card product-form-card">
+  <form method="POST" class="order-form">
+    <div class="form-grid form-grid-2">
+      <div class="form-group">
+        <label for="item_code">Item Code</label>
+        <input type="text" id="item_code" name="item_code" required>
+      </div>
+
+      <div class="form-group">
+        <label for="item_name">Item Name</label>
+        <input type="text" id="item_name" name="item_name" required>
+      </div>
+
+      <div class="form-group">
+        <label for="measurement_unit">Measurement Unit</label>
+        <select id="measurement_unit" name="measurement_unit" required>
+          <option value="pcs">pcs</option>
+          <option value="m">m</option>
+          <option value="m2">m2</option>
+          <option value="liter">liter</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="unit_price">Unit Price</label>
+        <input type="number" step="0.01" min="0" id="unit_price" name="unit_price" value="0" required>
+      </div>
+
+      <div class="form-group">
+        <label for="stock_quantity">Stock Quantity</label>
+        <input type="number" step="0.01" min="0" id="stock_quantity" name="stock_quantity" value="0" required>
+      </div>
+
+      <div class="form-group">
+        <label for="min_stock">Min Stock</label>
+        <input type="number" step="0.01" min="0" id="min_stock" name="min_stock" value="0" required>
+      </div>
+
+      <div class="form-group form-group-full">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="5" placeholder="Enter item description"></textarea>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('items') }}" class="dashboard-btn secondary">Cancel</a>
+      <button type="submit" class="dashboard-btn primary">Save Item</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

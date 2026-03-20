@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}UMS | Orders{% endblock %}
+
+{% block content %}
+<div class="jobs-header">
+  <div class="jobs-header-left">
+    <span class="eyebrow-label">Orders</span>
+    <h1>Orders</h1>
+    <p>Manage and track all production orders in one operational view.</p>
+  </div>
+
+  <div class="jobs-header-right">
+    <a href="{{ url_for('new_order') }}" class="dashboard-btn primary">New Order</a>
+  </div>
+</div>
+
+<div class="dashboard-form-card section-spacing jobs-filter-card">
+  <form method="GET" action="{{ url_for('orders') }}" class="order-form live-filter-form" data-target="#orders-results">
+    <div class="jobs-filter-grid jobs-filter-grid-compact">
+      <div class="form-group">
+        <label for="order_number">Order</label>
+        <input
+          type="text"
+          id="order_number"
+          name="order_number"
+          value="{{ filters.order_number }}"
+          placeholder="Order number"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="product_name">Product</label>
+        <input
+          type="text"
+          id="product_name"
+          name="product_name"
+          value="{{ filters.product_name }}"
+          placeholder="Product name"
+        >
+      </div>
+    </div>
+
+    <div class="jobs-status-pills">
+      <span class="jobs-status-label">Status</span>
+
+      <label class="jobs-pill-option">
+        <input
+          type="checkbox"
+          name="status"
+          value="All"
+          {% if not filters.status or "All" in filters.status %}checked{% endif %}
+        >
+        <span>All</span>
+      </label>
+
+      <label class="jobs-pill-option">
+        <input
+          type="checkbox"
+          name="status"
+          value="Waiting"
+          {% if "Waiting" in filters.status %}checked{% endif %}
+        >
+        <span>Waiting</span>
+      </label>
+
+      <label class="jobs-pill-option">
+        <input
+          type="checkbox"
+          name="status"
+          value="In Progress"
+          {% if "In Progress" in filters.status %}checked{% endif %}
+        >
+        <span>In Progress</span>
+      </label>
+
+      <label class="jobs-pill-option">
+        <input
+          type="checkbox"
+          name="status"
+          value="Completed"
+          {% if "Completed" in filters.status %}checked{% endif %}
+        >
+        <span>Completed</span>
+      </label>
+
+      <label class="jobs-pill-option">
+        <input
+          type="checkbox"
+          name="status"
+          value="Delayed"
+          {% if "Delayed" in filters.status %}checked{% endif %}
+        >
+        <span>Delayed</span>
+      </label>
+    </div>
+
+    <details class="jobs-more-filters">
+      <summary>More filters</summary>
+
+      <div class="jobs-more-filters-grid">
+        <div class="form-group">
+          <label for="priority">Priority</label>
+          <select id="priority" name="priority">
+            <option value="">All</option>
+            <option value="Low" {% if filters.priority == "Low" %}selected{% endif %}>Low</option>
+            <option value="Medium" {% if filters.priority == "Medium" %}selected{% endif %}>Medium</option>
+            <option value="High" {% if filters.priority == "High" %}selected{% endif %}>High</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="due_date_from">Due Date From</label>
+          <input
+            type="date"
+            id="due_date_from"
+            name="due_date_from"
+            value="{{ filters.due_date_from }}"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="due_date_to">Due Date To</label>
+          <input
+            type="date"
+            id="due_date_to"
+            name="due_date_to"
+            value="{{ filters.due_date_to }}"
+          >
+        </div>
+      </div>
+    </details>
+
+    <div class="form-actions">
+      <a href="{{ url_for('orders') }}" class="dashboard-btn secondary">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div id="orders-results">
+  <div class="dashboard-table-card">
+    <div class="card-header">
+      <div>
+        <span class="card-kicker">Order list</span>
+        <h4>All Orders</h4>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table class="orders-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Status</th>
+            <th>Due Date</th>
+            <th>Priority</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if orders %}
+            {% for order in orders %}
+              {% set status_class = "" %}
+              {% if order.status == "In Progress" %}
+                {% set status_class = "in-progress" %}
+              {% elif order.status == "Waiting" %}
+                {% set status_class = "waiting" %}
+              {% elif order.status == "Completed" %}
+                {% set status_class = "completed" %}
+              {% elif order.status == "Delayed" %}
+                {% set status_class = "delayed" %}
+              {% endif %}
+
+              <tr>
+                <td data-label="Order">
+                  <strong>{{ order.order_number }}</strong>
+                </td>
+
+                <td data-label="Product">{{ order.product_name }}</td>
+
+                <td data-label="Qty">{{ order.quantity }}</td>
+
+                <td data-label="Status">
+                  <span class="status-badge {{ status_class }}">{{ order.status }}</span>
+                </td>
+
+                <td data-label="Due Date">{{ order.due_date }}</td>
+
+                <td data-label="Priority">
+                  <span class="priority-pill priority-{{ order.priority|lower }}">{{ order.priority }}</span>
+                </td>
+
+                <td data-label="Actions" class="actions-cell">
+                  <a href="{{ url_for('order_materials', order_id=order.id) }}" class="table-action-btn btn-neutral">Materials</a>
+                  <a href="{{ url_for('edit_order', order_id=order.id) }}" class="table-action-btn btn-edit">Edit</a>
+
+                  <form
+                    method="POST"
+                    action="{{ url_for('delete_order', order_id=order.id) }}"
+                    class="inline-form"
+                    onsubmit="return confirm('Are you sure you want to delete this order?');"
+                  >
+                    <button type="submit" class="table-action-btn btn-delete">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="empty-table-message">No orders found.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.querySelector(".live-filter-form");
+  const results = document.querySelector("#orders-results");
+
+  if (!form || !results) return;
+
+  const statusInputs = Array.from(form.querySelectorAll('input[name="status"]'));
+  const allInput = statusInputs.find(input => input.value === "All");
+  const otherStatusInputs = statusInputs.filter(input => input.value !== "All");
+
+  function debounce(fn, delay) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  function syncStatusCheckboxes(changedInput) {
+    if (!allInput) return;
+
+    if (changedInput === allInput && allInput.checked) {
+      otherStatusInputs.forEach(input => {
+        input.checked = false;
+      });
+      return;
+    }
+
+    if (changedInput !== allInput && changedInput.checked) {
+      allInput.checked = false;
+    }
+
+    const anyOtherChecked = otherStatusInputs.some(input => input.checked);
+
+    if (!anyOtherChecked) {
+      allInput.checked = true;
+    }
+  }
+
+  async function submitLiveForm() {
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+
+    for (const [key, value] of formData.entries()) {
+      params.append(key, value);
+    }
+
+    const url = `${form.action}?${params.toString()}`;
+
+    results.classList.add("is-loading");
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load filtered orders.");
+      }
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const newResults = doc.querySelector("#orders-results");
+
+      if (!newResults) {
+        throw new Error("Updated results block not found.");
+      }
+
+      results.innerHTML = newResults.innerHTML;
+      window.history.replaceState({}, "", url);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      results.classList.remove("is-loading");
+    }
+  }
+
+  const debouncedSubmit = debounce(submitLiveForm, 250);
+
+  const allInputs = form.querySelectorAll("input, select");
+
+  allInputs.forEach(input => {
+    if (input.type === "checkbox" || input.type === "date" || input.tagName === "SELECT") {
+      input.addEventListener("change", function () {
+        if (input.name === "status") {
+          syncStatusCheckboxes(input);
+        }
+        submitLiveForm();
+      });
+    }
+
+    if (input.type === "text") {
+      input.addEventListener("input", debouncedSubmit);
+
+      input.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitLiveForm();
+        }
+      });
+    }
+  });
+
+  const anyOtherCheckedOnLoad = otherStatusInputs.some(input => input.checked);
+  if (allInput) {
+    allInput.checked = !anyOtherCheckedOnLoad;
+  }
+});
+</script>
+{% endblock %}

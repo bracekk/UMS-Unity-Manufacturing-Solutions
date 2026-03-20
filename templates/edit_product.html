@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}UMS | Edit Product{% endblock %}
+
+{% block content %}
+<div class="jobs-header">
+  <div class="jobs-header-left">
+    <span class="eyebrow-label">Products</span>
+    <h1>Edit Product</h1>
+    <p>Update finished product details, stock and production settings.</p>
+  </div>
+
+  <div class="jobs-header-right">
+    <a href="{{ url_for('products') }}" class="dashboard-btn secondary">Back to Products</a>
+  </div>
+</div>
+
+<div class="dashboard-form-card product-form-card">
+  <form method="POST" class="order-form">
+    <div class="form-grid form-grid-2">
+      <div class="form-group">
+        <label for="product_code">Product Code</label>
+        <input
+          type="text"
+          id="product_code"
+          name="product_code"
+          value="{{ product.product_code }}"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="product_name">Product Name</label>
+        <input
+          type="text"
+          id="product_name"
+          name="product_name"
+          value="{{ product.product_name }}"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="measurement_unit">Measurement Unit</label>
+        <select id="measurement_unit" name="measurement_unit" required>
+          <option value="pcs" {% if product.measurement_unit == "pcs" %}selected{% endif %}>pcs</option>
+          <option value="m" {% if product.measurement_unit == "m" %}selected{% endif %}>m</option>
+          <option value="m2" {% if product.measurement_unit == "m2" %}selected{% endif %}>m2</option>
+          <option value="liter" {% if product.measurement_unit == "liter" %}selected{% endif %}>liter</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="time_per_unit">Time per Unit (min)</label>
+        <input
+          type="number"
+          step="0.01"
+          id="time_per_unit"
+          name="time_per_unit"
+          value="{{ product.time_per_unit }}"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="stock_quantity">Stock Quantity</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          id="stock_quantity"
+          name="stock_quantity"
+          value="{{ product.stock_quantity }}"
+          required
+        >
+      </div>
+
+      <div class="form-group form-group-full">
+        <label for="description">Description</label>
+        <textarea
+          id="description"
+          name="description"
+          rows="5"
+        >{{ product.description }}</textarea>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('products') }}" class="dashboard-btn secondary">Cancel</a>
+      <button type="submit" class="dashboard-btn primary">Update Product</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

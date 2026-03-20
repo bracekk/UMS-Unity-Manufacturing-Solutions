@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}UMS | New Order{% endblock %}
+
+{% block content %}
+<div class="jobs-header">
+  <div class="jobs-header-left">
+    <span class="eyebrow-label">Orders</span>
+    <h1>New Order</h1>
+    <p>Create a manufacturing order and generate production jobs from the selected product.</p>
+  </div>
+
+  <div class="jobs-header-right">
+    <a href="{{ url_for('orders') }}" class="dashboard-btn secondary">Back to Orders</a>
+  </div>
+</div>
+
+<div class="dashboard-form-card product-form-card">
+  <form method="POST" class="order-form">
+    <div class="form-grid form-grid-2">
+      <div class="form-group">
+        <label for="order_number">Order Number</label>
+        <input type="text" id="order_number" name="order_number" required>
+      </div>
+
+      <div class="form-group">
+        <label for="product_id">Product</label>
+        <select id="product_id" name="product_id" required>
+          {% for product in products %}
+            <option value="{{ product[0] }}">{{ product[1] }} - {{ product[2] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="quantity">Quantity</label>
+        <input type="number" step="0.01" id="quantity" name="quantity" required>
+      </div>
+
+      <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status" required>
+          <option value="Waiting">Waiting</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Completed">Completed</option>
+          <option value="Delayed">Delayed</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="due_date">Due Date</label>
+        <input type="date" id="due_date" name="due_date" required>
+      </div>
+
+      <div class="form-group">
+        <label for="priority">Priority</label>
+        <select id="priority" name="priority" required>
+          <option value="Low">Low</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="High">High</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('orders') }}" class="dashboard-btn secondary">Cancel</a>
+      <button type="submit" class="dashboard-btn primary">Create Order</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

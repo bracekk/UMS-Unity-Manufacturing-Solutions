@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}UMS | Material Shortage{% endblock %}
+
+{% block content %}
+<div class="jobs-header">
+  <div class="jobs-header-left">
+    <span class="eyebrow-label">Alerts</span>
+    <h1>Material Shortage</h1>
+    <p>See which materials are below required levels and need replenishment.</p>
+  </div>
+
+  <div class="jobs-header-right">
+    <button type="button" class="dashboard-btn primary">Generate Purchase List</button>
+  </div>
+</div>
+
+<div class="dashboard-stats section-spacing">
+  <div class="stat-card stat-card-accent">
+    <span class="stat-label">Shortage Items</span>
+    <strong>{{ shortage_items|length }}</strong>
+    <span class="stat-meta">Items needing attention</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Critical Items</span>
+    <strong>
+      {% set critical = namespace(value=0) %}
+      {% for item in shortage_items %}
+        {% if item.stock_quantity <= 0 %}
+          {% set critical.value = critical.value + 1 %}
+        {% endif %}
+      {% endfor %}
+      {{ critical.value }}
+    </strong>
+    <span class="stat-meta">Currently out of stock</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Low Stock</span>
+    <strong>{{ shortage_items|length - critical.value }}</strong>
+    <span class="stat-meta">Below minimum threshold</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Procurement</span>
+    <strong>Open</strong>
+    <span class="stat-meta">Use this list for replenishment</span>
+  </div>
+</div>
+
+<div class="dashboard-table-card shortage-table-card">
+  <div class="card-header">
+    <div>
+      <span class="card-kicker">Procurement</span>
+      <h4>Missing Materials</h4>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table class="orders-table shortage-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Unit</th>
+          <th>Current Stock</th>
+          <th>Min Stock</th>
+          <th>Required to Order</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% if shortage_items %}
+          {% for item in shortage_items %}
+            <tr class="shortage-row">
+              <td data-label="Item">
+                <div class="product-cell">
+                  <strong>{{ item.item_name }}</strong>
+                  <span class="product-sub">{{ item.item_code }}</span>
+                </div>
+              </td>
+
+              <td data-label="Unit">{{ item.unit }}</td>
+
+              <td data-label="Current Stock">
+                {% if item.stock_quantity <= 0 %}
+                  <span class="stock-badge danger">{{ item.stock_quantity }}</span>
+                {% else %}
+                  <span class="stock-badge warning">{{ item.stock_quantity }}</span>
+                {% endif %}
+              </td>
+
+              <td data-label="Min Stock">
+                {{ item.min_stock }}
+              </td>
+
+              <td data-label="Required to Order">
+                <strong class="shortage-qty">{{ item.required }}</strong>
+              </td>
+
+              <td data-label="Status">
+                {% if item.stock_quantity <= 0 %}
+                  <span class="status-badge delayed">Out of stock</span>
+                {% else %}
+                  <span class="status-badge waiting">Below minimum</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="empty-table-message">No missing materials 🎉</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

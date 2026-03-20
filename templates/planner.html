@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}UMS | Planner{% endblock %}
+
+{% block content %}
+<div class="planner-header">
+  <div class="planner-header-left">
+    <span class="eyebrow-label">Scheduling</span>
+    <h1>Planner</h1>
+    <p>{{ planner_month_name }} {{ planner_year }} production timeline by workstation.</p>
+  </div>
+
+  <div class="planner-header-right">
+    <a href="{{ url_for('planner', year=prev_year, month=prev_month) }}" class="dashboard-btn secondary">Previous</a>
+    <a href="{{ url_for('planner') }}" class="dashboard-btn secondary">Today</a>
+    <a href="{{ url_for('planner', year=next_year, month=next_month) }}" class="dashboard-btn primary">Next</a>
+  </div>
+</div>
+
+<div class="planner-toolbar-card">
+  <div class="planner-toolbar-row">
+    <div class="planner-toolbar-item">
+      <span class="planner-toolbar-label">View</span>
+      <strong>Monthly workstation schedule</strong>
+    </div>
+    <div class="planner-toolbar-item">
+      <span class="planner-toolbar-label">Drag & drop</span>
+      <strong>Move jobs directly on the timeline</strong>
+    </div>
+    <div class="planner-toolbar-item">
+      <span class="planner-toolbar-label">Backlog</span>
+      <strong>{{ unscheduled_jobs|length }} unscheduled jobs</strong>
+    </div>
+  </div>
+</div>
+
+<div class="planner-month-shell planner-shell-upgraded">
+  <div class="planner-scroll">
+    <div class="planner-month-grid" style="grid-template-columns: 220px repeat({{ month_days|length }}, minmax(44px, 1fr));">
+      <div class="planner-sticky planner-corner-cell">Workstation</div>
+
+      {% for day in month_days %}
+        <div class="planner-sticky planner-day-cell {% if day.weekday in ['Sat', 'Sun'] %}weekend{% endif %}" data-date="{{ day.date }}">
+          <strong>{{ day.day }}</strong>
+          <span>{{ day.weekday }}</span>
+        </div>
+      {% endfor %}
+
+      {% for workstation in workstations %}
+        <div class="planner-sticky planner-workstation-cell">
+          <div class="planner-workstation-name">{{ workstation.name }}</div>
+          <div class="planner-workstation-meta">{{ workstation.hours_per_shift * workstation.shifts_per_day }} h/day</div>
+        </div>
+
+        <div class="planner-row-track" style="grid-column: 2 / span {{ month_days|length }};">
+          <div class="planner-row-days" style="grid-template-columns: repeat({{ month_days|length }}, minmax(44px, 1fr));">
+            {% for day in month_days %}
+              <div
+                class="planner-day-slot {% if day.weekday in ['Sat', 'Sun'] %}weekend{% endif %}"
+                data-date="{{ day.date }}"
+                data-workstation-id="{{ workstation.id }}"
+                ondragover="allowDrop(event)"
+                ondrop="dropJob(event)"
+              ></div>
+            {% endfor %}
+          </div>
+
+          <div class="planner-bars-layer">
+            {% for job in jobs_by_workstation[workstation.id] %}
+              {% set status_class = '' %}
+              {% if job.status == 'Waiting' %}{% set status_class = 'waiting' %}{% endif %}
+              {% if job.status == 'Ongoing' %}{% set status_class = 'in-progress' %}{% endif %}
+              {% if job.status == 'Done' %}{% set status_class = 'completed' %}{% endif %}
+              {% if job.status == 'Paused' %}{% set status_class = 'delayed' %}{% endif %}
+
+              <div
+                class="planner-job-bar {{ status_class }}"
+                draggable="true"
+                data-job-id="{{ job.id }}"
+                data-start-date="{{ job.planned_start }}"
+                ondragstart="dragJob(event)"
+                title="{{ job.order_number }} | {{ job.job_name }} | {{ job.planned_start }} → {{ job.planned_end }}"
+                style="left: calc((100% / {{ month_days|length }}) * ({{ job.start_day }} - 1) + 4px); width: calc((100% / {{ month_days|length }}) * {{ job.span_days }} - 8px); background: {{ job.color }};"
+              >
+                <div class="planner-job-title">{{ job.order_number }} - {{ job.job_name }}</div>
+                <div class="planner-job-subtitle">{{ job.product_name }}</div>
+                <div class="planner-job-progress">
+                  <div class="planner-job-progress-fill" style="width: {{ job.progress_percent }}%;"></div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="planner-backlog-card">
+  <div class="card-header">
+    <div>
+      <span class="card-kicker">Backlog</span>
+      <h4>Unscheduled Jobs</h4>
+    </div>
+  </div>
+
+  <div class="planner-unscheduled-wrap">
+    {% if unscheduled_jobs %}
+      {% for job in unscheduled_jobs %}
+        <div class="planner-unscheduled-card" draggable="true" data-job-id="{{ job.id }}" ondragstart="dragJob(event)">
+          <div class="planner-job-title">{{ job.order_number }} - {{ job.job_name }}</div>
+          <div class="planner-job-subtitle">{{ job.product_name }}</div>
+          <div class="planner-job-meta">{{ job.status }}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state-note">No unscheduled jobs.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function allowDrop(event) {
+  event.preventDefault();
+  event.currentTarget.classList.add("drag-over");
+}
+
+function dragJob(event) {
+  event.dataTransfer.setData("jobId", event.currentTarget.dataset.jobId);
+}
+
+function dropJob(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("drag-over");
+
+  const jobId = event.dataTransfer.getData("jobId");
+  const targetDate = event.currentTarget.dataset.date;
+
+  if (!jobId || !targetDate) return;
+
+  const formData = new FormData();
+  formData.append("planned_start", targetDate);
+
+  fetch(`/planner/update-job-date/${jobId}`, {
+    method: "POST",
+    body: formData
+  })
+  .then(response => {
+    if (!response.ok) {
+      alert("Failed to update planner date.");
+      return;
+    }
+    window.location.reload();
+  })
+  .catch(() => {
+    alert("Failed to update planner date.");
+  });
+}
+
+/* remove highlight when leaving cell */
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".planner-day-slot").forEach(el => {
+    el.addEventListener("dragleave", () => {
+      el.classList.remove("drag-over");
+    });
+  });
+});
+</script>
+{% endblock %}

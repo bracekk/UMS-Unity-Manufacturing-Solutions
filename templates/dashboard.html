@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}UMS | Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+  <div class="dashboard-header-left">
+    <span class="eyebrow-label">Overview</span>
+    <h1>Production Dashboard</h1>
+    <p>Live production overview across orders, capacity and execution.</p>
+  </div>
+
+  <div class="dashboard-header-right">
+    <button type="button" class="dashboard-btn secondary">Export</button>
+    <a href="{{ url_for('new_order') }}" class="dashboard-btn primary">New Order</a>
+  </div>
+</div>
+
+<div class="dashboard-stats dashboard-stats-compact">
+  <div class="stat-card stat-card-accent">
+    <span class="stat-label">Orders active</span>
+    <strong>{{ total_orders }}</strong>
+    <span class="stat-meta">Current production queue</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Delayed jobs</span>
+    <strong>{{ delayed_count }}</strong>
+    <span class="stat-meta">Need attention first</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Waiting orders</span>
+    <strong>{{ waiting_count }}</strong>
+    <span class="stat-meta">Not started yet</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Completed</span>
+    <strong>{{ completed_count }}</strong>
+    <span class="stat-meta">Finished successfully</span>
+  </div>
+</div>
+
+<div class="dashboard-content-grid">
+  <div class="dashboard-table-card dashboard-main-table-card">
+    <div class="card-header">
+      <div>
+        <span class="card-kicker">Activity</span>
+        <h4>Recent Orders</h4>
+      </div>
+      <a href="{{ url_for('orders') }}">View all</a>
+    </div>
+
+    <div class="table-wrapper">
+      <table class="orders-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Status</th>
+            <th>Due Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if recent_orders %}
+            {% for order in recent_orders %}
+              {% set status_class = "" %}
+              {% if order.status == "In Progress" %}
+                {% set status_class = "in-progress" %}
+              {% elif order.status == "Waiting" %}
+                {% set status_class = "waiting" %}
+              {% elif order.status == "Completed" %}
+                {% set status_class = "completed" %}
+              {% elif order.status == "Delayed" %}
+                {% set status_class = "delayed" %}
+              {% endif %}
+
+              <tr>
+                <td data-label="Order"><strong>{{ order.order_number }}</strong></td>
+                <td data-label="Product">{{ order.product_name }}</td>
+                <td data-label="Qty">{{ order.quantity }}</td>
+                <td data-label="Status">
+                  <span class="status-badge {{ status_class }}">{{ order.status }}</span>
+                </td>
+                <td data-label="Due Date">{{ order.due_date }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="empty-table-message">No recent orders found.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="dashboard-side-panels">
+    <div class="mini-panel">
+      <div class="card-header compact">
+        <div>
+          <span class="card-kicker">Summary</span>
+          <h4>Order Summary</h4>
+        </div>
+      </div>
+
+      <ul class="summary-list">
+        <li><span>In Progress</span><strong>{{ in_progress_count }}</strong></li>
+        <li><span>Waiting</span><strong>{{ waiting_count }}</strong></li>
+        <li><span>Completed</span><strong>{{ completed_count }}</strong></li>
+        <li><span>Delayed</span><strong>{{ delayed_count }}</strong></li>
+      </ul>
+    </div>
+
+    <div class="mini-panel">
+      <div class="card-header compact">
+        <div>
+          <span class="card-kicker">Capacity</span>
+          <h4>Workstation Load</h4>
+        </div>
+      </div>
+
+      <div class="workstation-load-grid dashboard-ring-grid">
+        {% if workstation_load %}
+          {% for workstation in workstation_load %}
+            {% set ring_percent = workstation.load_percent if workstation.load_percent < 100 else 100 %}
+            {% if workstation.load_percent > 100 %}
+              {% set ring_color = "#ef4444" %}
+            {% elif workstation.load_percent > 80 %}
+              {% set ring_color = "#f59e0b" %}
+            {% else %}
+              {% set ring_color = "#22c55e" %}
+            {% endif %}
+
+            <a href="{{ url_for('jobs', workstation=workstation.id) }}" class="load-ring-card dashboard-ring-card">
+              <div class="load-ring" style="background: conic-gradient({{ ring_color }} {{ ring_percent }}%, rgba(255,255,255,0.08) 0);">
+                <strong>{{ workstation.load_percent }}%</strong>
+              </div>
+              <h6>{{ workstation.name }}</h6>
+              <p>{{ workstation.used_load }} / {{ workstation.monthly_capacity }} h</p>
+            </a>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state-note">No workstation load data available yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
