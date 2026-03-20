@@ -3345,3 +3345,19 @@ select,
     transition: opacity 0.18s ease;
     pointer-events: none;
 }
+.job-row-card {
+  overflow: visible !important;
+}
+
+.custom-dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 9999;
+}
