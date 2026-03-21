@@ -24,12 +24,33 @@
       </div>
 
       <div class="form-group">
-        <label for="product_id">Product</label>
-        <select id="product_id" name="product_id" required>
-          {% for product in products %}
-            <option value="{{ product[0] }}">{{ product[1] }} - {{ product[2] }}</option>
-          {% endfor %}
-        </select>
+        <label>Product</label>
+        <div class="custom-select" data-name="product_id">
+          <div class="custom-select-trigger">
+            <span>
+              {% if products %}
+                {{ products[0][1] }} - {{ products[0][2] }}
+              {% else %}
+                Select product
+              {% endif %}
+            </span>
+          </div>
+
+          <div class="custom-options">
+            {% for product in products %}
+              <div class="custom-option" data-value="{{ product[0] }}">
+                {{ product[1] }} - {{ product[2] }}
+              </div>
+            {% endfor %}
+          </div>
+
+          <input
+            type="hidden"
+            name="product_id"
+            value="{% if products %}{{ products[0][0] }}{% endif %}"
+            {% if not products %}disabled{% endif %}
+          >
+        </div>
       </div>
 
       <div class="form-group">
@@ -38,13 +59,21 @@
       </div>
 
       <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status" name="status" required>
-          <option value="Waiting">Waiting</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Completed">Completed</option>
-          <option value="Delayed">Delayed</option>
-        </select>
+        <label>Status</label>
+        <div class="custom-select" data-name="status">
+          <div class="custom-select-trigger">
+            <span>Waiting</span>
+          </div>
+
+          <div class="custom-options">
+            <div class="custom-option" data-value="Waiting">Waiting</div>
+            <div class="custom-option" data-value="In Progress">In Progress</div>
+            <div class="custom-option" data-value="Completed">Completed</div>
+            <div class="custom-option" data-value="Delayed">Delayed</div>
+          </div>
+
+          <input type="hidden" name="status" value="Waiting">
+        </div>
       </div>
 
       <div class="form-group">
@@ -53,12 +82,20 @@
       </div>
 
       <div class="form-group">
-        <label for="priority">Priority</label>
-        <select id="priority" name="priority" required>
-          <option value="Low">Low</option>
-          <option value="Medium" selected>Medium</option>
-          <option value="High">High</option>
-        </select>
+        <label>Priority</label>
+        <div class="custom-select" data-name="priority">
+          <div class="custom-select-trigger">
+            <span>Medium</span>
+          </div>
+
+          <div class="custom-options">
+            <div class="custom-option" data-value="Low">Low</div>
+            <div class="custom-option" data-value="Medium">Medium</div>
+            <div class="custom-option" data-value="High">High</div>
+          </div>
+
+          <input type="hidden" name="priority" value="Medium">
+        </div>
       </div>
     </div>
 
@@ -68,4 +105,49 @@
     </div>
   </form>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const customSelects = document.querySelectorAll(".custom-select");
+
+  customSelects.forEach(select => {
+    const trigger = select.querySelector(".custom-select-trigger");
+    const triggerText = trigger.querySelector("span");
+    const options = select.querySelectorAll(".custom-option");
+    const hiddenInput = select.querySelector('input[type="hidden"]');
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+
+      customSelects.forEach(otherSelect => {
+        if (otherSelect !== select) {
+          otherSelect.classList.remove("open");
+        }
+      });
+
+      select.classList.toggle("open");
+    });
+
+    options.forEach(option => {
+      option.addEventListener("click", function (e) {
+        e.stopPropagation();
+
+        const value = option.dataset.value;
+        const text = option.textContent.trim();
+
+        triggerText.textContent = text;
+        hiddenInput.value = value;
+
+        select.classList.remove("open");
+      });
+    });
+  });
+
+  document.addEventListener("click", function () {
+    customSelects.forEach(select => {
+      select.classList.remove("open");
+    });
+  });
+});
+</script>
 {% endblock %}
