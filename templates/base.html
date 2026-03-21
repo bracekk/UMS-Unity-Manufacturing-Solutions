@@ -12,7 +12,7 @@
 <div class="app">
     <aside class="sidebar">
         <a href="{{ url_for('dashboard') }}" class="logo">
-        <span class="logo-u">U</span><span class="logo-m">M</span><span class="logo-s">S</span>
+            <span class="logo-u">U</span><span class="logo-m">M</span><span class="logo-s">S</span>
         </a>
 
         <nav class="sidebar-nav">
@@ -27,12 +27,14 @@
             <a href="{{ url_for('products') }}" class="{% if active_page == 'products' %}active{% endif %}">Products</a>
             <a href="{{ url_for('items') }}" class="{% if active_page == 'items' %}active{% endif %}">Items</a>
             <a href="{{ url_for('inventory') }}" class="{% if active_page == 'inventory' %}active{% endif %}">Inventory</a>
-            <a href="{{ url_for('materials_shortage') }}" class="{% if active_page == 'shortage' %}active{% endif %}">Shortage</a>
-        </nav>
 
-        <div class="sidebar-footer">
-            <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
-        </div>
+            {% if has_permission_ui("manage_procurement") %}
+            <div class="sidebar-section-title">Procurement</div>
+            <a href="{{ url_for('purchase_requests') }}" class="{% if active_page == 'purchase_requests' %}active{% endif %}">Requests</a>
+            <a href="{{ url_for('suppliers') }}" class="{% if active_page == 'suppliers' %}active{% endif %}">Suppliers</a>
+            <a href="{{ url_for('materials_shortage') }}" class="{% if active_page == 'shortage' %}active{% endif %}">Shortages</a>
+            {% endif %}
+        </nav>
     </aside>
 
     <main class="main">
@@ -40,8 +42,24 @@
             <div class="topbar-left">
                 <span class="topbar-title">Workspace</span>
             </div>
+
             <div class="topbar-right">
-                <span class="user-name">Welcome, {{ session.get('user_name') }}</span>
+                <div class="account-menu">
+                    <button type="button" class="account-menu-trigger" id="accountMenuTrigger">
+                        <span class="account-menu-label">Welcome, {{ session.get('user_name') }}</span>
+                        <span class="account-menu-caret">▾</span>
+                    </button>
+
+                    <div class="account-menu-dropdown" id="accountMenuDropdown">
+                        <a href="{{ url_for('account') }}" class="account-menu-item">My Account</a>
+
+                        {% if has_permission_ui("manage_users") %}
+                            <a href="{{ url_for('users') }}" class="account-menu-item">User Management</a>
+                        {% endif %}
+
+                        <a href="{{ url_for('logout') }}" class="account-menu-item danger">Logout</a>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -60,6 +78,10 @@
         </div>
     </main>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const section = document.querySelector(".capabilities-orbit-section");
@@ -85,6 +107,7 @@ document.addEventListener("DOMContentLoaded", function () {
     observer.observe(section);
 });
 </script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const statusInputs = Array.from(document.querySelectorAll('input[name="status"]'));
@@ -124,6 +147,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 </script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const liveForms = document.querySelectorAll(".live-filter-form");
@@ -154,5 +178,150 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 });
 </script>
+
+<script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const trigger = document.getElementById("accountMenuTrigger");
+    const dropdown = document.getElementById("accountMenuDropdown");
+
+    if (!trigger || !dropdown) return;
+
+    trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle("open");
+        trigger.classList.toggle("open");
+    });
+
+    document.addEventListener("click", function () {
+        dropdown.classList.remove("open");
+        trigger.classList.remove("open");
+    });
+
+    dropdown.addEventListener("click", function (e) {
+        e.stopPropagation();
+    });
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const dashboardGrid = document.getElementById("dashboardGrid");
+    if (!dashboardGrid || typeof Sortable === "undefined") return;
+
+    const storageKey = "ums-dashboard-layout-v1";
+    const saveUrl = dashboardGrid.dataset.saveUrl || "";
+
+    function getWidgets() {
+        return Array.from(dashboardGrid.querySelectorAll(".dashboard-widget"));
+    }
+
+    function saveLayoutLocal() {
+        const order = getWidgets().map(widget => widget.dataset.widgetId);
+        localStorage.setItem(storageKey, JSON.stringify(order));
+        return order;
+    }
+
+    function applySavedLayout(savedOrder) {
+        if (!Array.isArray(savedOrder) || !savedOrder.length) return;
+
+        const widgetMap = {};
+        getWidgets().forEach(widget => {
+            widgetMap[widget.dataset.widgetId] = widget;
+        });
+
+        savedOrder.forEach(id => {
+            const widget = widgetMap[id];
+            if (widget) {
+                dashboardGrid.appendChild(widget);
+            }
+        });
+    }
+
+    function restoreLocalLayout() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey));
+            applySavedLayout(saved);
+        } catch (error) {
+            console.warn("Dashboard layout restore failed", error);
+        }
+    }
+
+    function saveLayoutServer(order) {
+        if (!saveUrl) return;
+
+        fetch(saveUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ order })
+        }).catch(error => {
+            console.warn("Dashboard layout save failed", error);
+        });
+    }
+
+    restoreLocalLayout();
+
+    const sortable = new Sortable(dashboardGrid, {
+        animation: 220,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        handle: ".widget-drag-handle",
+        ghostClass: "dashboard-sortable-ghost",
+        chosenClass: "dashboard-sortable-chosen",
+        dragClass: "dashboard-sortable-drag",
+        onEnd: function () {
+            const order = saveLayoutLocal();
+            saveLayoutServer(order);
+        }
+    });
+
+    const resetBtn = document.getElementById("dashboardResetBtn");
+    if (resetBtn) {
+        resetBtn.addEventListener("click", function () {
+            localStorage.removeItem(storageKey);
+            window.location.reload();
+        });
+    }
+
+    const exportBtn = document.getElementById("dashboardExportBtn");
+    if (exportBtn) {
+        exportBtn.addEventListener("click", function () {
+            window.print();
+        });
+    }
+
+    if (typeof gsap !== "undefined") {
+        gsap.from(".dashboard-widget", {
+            y: 18,
+            opacity: 0,
+            duration: 0.55,
+            stagger: 0.05,
+            ease: "power3.out"
+        });
+
+        document.querySelectorAll(".dashboard-draggable-card").forEach((card) => {
+            card.addEventListener("mousemove", function (e) {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                card.style.setProperty("--mx", x + "px");
+                card.style.setProperty("--my", y + "px");
+            });
+        });
+    }
+
+    window.addEventListener("beforeunload", function () {
+        saveLayoutLocal();
+    });
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard-workspace.js') }}"></script>
+
 </body>
 </html>
