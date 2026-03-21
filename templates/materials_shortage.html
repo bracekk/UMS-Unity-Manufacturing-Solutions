@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}UMS | Material Shortage{% endblock %}
+{% block title %}UMS | Shortages{% endblock %}
 
 {% block content %}
 <div class="jobs-header">
   <div class="jobs-header-left">
-    <span class="eyebrow-label">Alerts</span>
-    <h1>Material Shortage</h1>
-    <p>See which materials are below required levels and need replenishment.</p>
+    <span class="eyebrow-label">Procurement</span>
+    <h1>Shortages</h1>
+    <p>Items below minimum stock. Create purchase requests directly from shortage rows.</p>
   </div>
 
   <div class="jobs-header-right">
-    <button type="button" class="dashboard-btn primary">Generate Purchase List</button>
+    <a href="{{ url_for('purchase_requests') }}" class="dashboard-btn secondary">View Requests</a>
   </div>
 </div>
 
@@ -19,98 +19,95 @@
   <div class="stat-card stat-card-accent">
     <span class="stat-label">Shortage Items</span>
     <strong>{{ shortage_items|length }}</strong>
-    <span class="stat-meta">Items needing attention</span>
+    <span class="stat-meta">Below minimum stock</span>
   </div>
 
   <div class="stat-card">
-    <span class="stat-label">Critical Items</span>
-    <strong>
-      {% set critical = namespace(value=0) %}
-      {% for item in shortage_items %}
-        {% if item.stock_quantity <= 0 %}
-          {% set critical.value = critical.value + 1 %}
-        {% endif %}
-      {% endfor %}
-      {{ critical.value }}
-    </strong>
-    <span class="stat-meta">Currently out of stock</span>
+    <span class="stat-label">High Priority</span>
+    <strong>{{ shortage_items|length }}</strong>
+    <span class="stat-meta">Procurement candidates</span>
   </div>
 
   <div class="stat-card">
-    <span class="stat-label">Low Stock</span>
-    <strong>{{ shortage_items|length - critical.value }}</strong>
-    <span class="stat-meta">Below minimum threshold</span>
+    <span class="stat-label">Auto Flow</span>
+    <strong>Ready</strong>
+    <span class="stat-meta">Create request from row</span>
   </div>
 
   <div class="stat-card">
-    <span class="stat-label">Procurement</span>
-    <strong>Open</strong>
-    <span class="stat-meta">Use this list for replenishment</span>
+    <span class="stat-label">Inventory Link</span>
+    <strong>Live</strong>
+    <span class="stat-meta">Reads real item stock</span>
   </div>
 </div>
 
-<div class="dashboard-table-card shortage-table-card">
+<div class="dashboard-table-card section-spacing shortage-table-card">
   <div class="card-header">
     <div>
-      <span class="card-kicker">Procurement</span>
-      <h4>Missing Materials</h4>
+      <span class="card-kicker">Shortage Queue</span>
+      <h4>Items Below Minimum Stock</h4>
     </div>
   </div>
 
   <div class="table-wrapper">
-    <table class="orders-table shortage-table">
+    <table class="orders-table">
       <thead>
         <tr>
           <th>Item</th>
-          <th>Unit</th>
-          <th>Current Stock</th>
-          <th>Min Stock</th>
+          <th>Supplier</th>
+          <th>In Stock</th>
+          <th>Minimum</th>
           <th>Required to Order</th>
-          <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
-
       <tbody>
         {% if shortage_items %}
           {% for item in shortage_items %}
             <tr class="shortage-row">
               <td data-label="Item">
                 <div class="product-cell">
-                  <strong>{{ item.item_name }}</strong>
-                  <span class="product-sub">{{ item.item_code }}</span>
+                  <strong>{{ item.item_code }}</strong>
+                  <span class="product-sub">{{ item.item_name }}</span>
                 </div>
               </td>
 
-              <td data-label="Unit">{{ item.unit }}</td>
-
-              <td data-label="Current Stock">
-                {% if item.stock_quantity <= 0 %}
-                  <span class="stock-badge danger">{{ item.stock_quantity }}</span>
-                {% else %}
-                  <span class="stock-badge warning">{{ item.stock_quantity }}</span>
-                {% endif %}
+              <td data-label="Supplier">
+                {{ item.supplier_name if item.supplier_name else "—" }}
               </td>
 
-              <td data-label="Min Stock">
-                {{ item.min_stock }}
+              <td data-label="In Stock">
+                <span class="stock-badge danger">{{ item.stock_quantity }} {{ item.unit }}</span>
+              </td>
+
+              <td data-label="Minimum">
+                {{ item.min_stock }} {{ item.unit }}
               </td>
 
               <td data-label="Required to Order">
-                <strong class="shortage-qty">{{ item.required_to_order | round(2) }}</strong>
+                <span class="shortage-qty">{{ item.required_to_order }} {{ item.unit }}</span>
               </td>
 
-              <td data-label="Status">
-                {% if item.stock_quantity <= 0 %}
-                  <span class="status-badge delayed">Out of stock</span>
-                {% else %}
-                  <span class="status-badge waiting">Below minimum</span>
-                {% endif %}
+              <td data-label="Actions">
+                <div class="actions-cell request-actions">
+                  <form method="POST" action="{{ url_for('create_request_from_shortage', item_id=item.id) }}" class="inline-action-form">
+                    <button type="submit" class="table-action-btn primary-action-btn">
+                      Create Request
+                    </button>
+                  </form>
+
+                  <a href="{{ url_for('edit_item', item_id=item.id) }}" class="table-action-btn">
+                    Edit Item
+                  </a>
+                </div>
               </td>
             </tr>
           {% endfor %}
         {% else %}
           <tr>
-            <td colspan="6" class="empty-table-message">No missing materials 🎉</td>
+            <td colspan="6" class="empty-table-message">
+              No shortages right now.
+            </td>
           </tr>
         {% endif %}
       </tbody>
