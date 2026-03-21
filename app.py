@@ -3,9 +3,13 @@ import sqlite3
 from datetime import datetime, timedelta
 import calendar
 import math
+import os
+import json
+
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "ums-secret-key-change-this-later"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-key-change-me")
 
 
 def init_db():
@@ -13,13 +17,10 @@ def init_db():
     cursor = conn.cursor()
 
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS orders (
+    CREATE TABLE IF NOT EXISTS companies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_number TEXT,
-        customer TEXT,
-        status TEXT,
-        due_date TEXT,
-        priority TEXT
+        name TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -29,7 +30,27 @@ def init_db():
         full_name TEXT,
         company TEXT,
         email TEXT UNIQUE,
-        password TEXT
+        password TEXT,
+        company_id INTEGER,
+        role TEXT NOT NULL DEFAULT 'admin',
+        FOREIGN KEY (company_id) REFERENCES companies(id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_number TEXT,
+        customer TEXT,
+        status TEXT,
+        due_date TEXT,
+        priority TEXT,
+        product_id INTEGER,
+        quantity REAL DEFAULT 1,
+        materials_reserved INTEGER NOT NULL DEFAULT 0,
+        company_id INTEGER,
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
 
@@ -42,7 +63,11 @@ def init_db():
         measurement_unit TEXT NOT NULL,
         unit_price REAL NOT NULL DEFAULT 0,
         stock_quantity REAL NOT NULL DEFAULT 0,
-        min_stock REAL NOT NULL DEFAULT 0
+        min_stock REAL NOT NULL DEFAULT 0,
+        supplier_id INTEGER,
+        company_id INTEGER,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
 
@@ -52,19 +77,41 @@ def init_db():
         product_code TEXT NOT NULL,
         product_name TEXT NOT NULL,
         description TEXT,
-        measurement_unit TEXT NOT NULL,
-        stock_quantity REAL NOT NULL DEFAULT 0
+        measurement_unit TEXT NOT NULL DEFAULT 'pcs',
+        stock_quantity REAL NOT NULL DEFAULT 0,
+        time_per_unit REAL NOT NULL DEFAULT 0,
+        company_id INTEGER,
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
+
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS bom (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id INTEGER NOT NULL,
-        item_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL DEFAULT 0,
         quantity REAL NOT NULL,
+        component_type TEXT NOT NULL DEFAULT 'item',
+        child_product_id INTEGER,
+        company_id INTEGER,
         FOREIGN KEY (product_id) REFERENCES products(id),
-        FOREIGN KEY (item_id) REFERENCES items(id)
+        FOREIGN KEY (item_id) REFERENCES items(id),
+        FOREIGN KEY (child_product_id) REFERENCES products(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dashboard_layouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        company_id INTEGER NOT NULL,
+        page_key TEXT NOT NULL DEFAULT 'dashboard',
+        layout_json TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, company_id, page_key)
     )
     """)
 
@@ -75,7 +122,10 @@ def init_db():
         description TEXT,
         hours_per_shift REAL NOT NULL DEFAULT 8,
         shifts_per_day INTEGER NOT NULL DEFAULT 1,
-        working_days_per_month INTEGER NOT NULL DEFAULT 20
+        working_days_per_month INTEGER NOT NULL DEFAULT 20,
+        color TEXT NOT NULL DEFAULT '#3b82f6',
+        company_id INTEGER,
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
 
@@ -87,8 +137,10 @@ def init_db():
         job_name TEXT NOT NULL,
         sequence INTEGER NOT NULL DEFAULT 1,
         estimated_hours REAL NOT NULL DEFAULT 0,
+        company_id INTEGER,
         FOREIGN KEY (product_id) REFERENCES products(id),
-        FOREIGN KEY (workstation_id) REFERENCES workstations(id)
+        FOREIGN KEY (workstation_id) REFERENCES workstations(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
 
@@ -105,87 +157,176 @@ def init_db():
         completed_quantity REAL NOT NULL DEFAULT 0,
         estimated_hours REAL NOT NULL,
         status TEXT NOT NULL DEFAULT 'Waiting',
+        planned_start TEXT,
+        planned_end TEXT,
+        parent_job_id INTEGER,
+        is_split_child INTEGER NOT NULL DEFAULT 0,
+        company_id INTEGER,
         FOREIGN KEY (order_id) REFERENCES orders(id),
         FOREIGN KEY (job_product_id) REFERENCES products(id),
-        FOREIGN KEY (workstation_id) REFERENCES workstations(id)
+        FOREIGN KEY (workstation_id) REFERENCES workstations(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
+    )
+    """)
+        # ---------------------------
+    # SUPPLIERS TABLE
+    # ---------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        supplier_code TEXT,
+        contact_person TEXT,
+        email TEXT,
+        phone TEXT,
+        address TEXT,
+        notes TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
 
-    try:
-        cursor.execute("ALTER TABLE products ADD COLUMN measurement_unit TEXT NOT NULL DEFAULT 'pcs'")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE products ADD COLUMN stock_quantity REAL NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE orders ADD COLUMN product_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE orders ADD COLUMN quantity REAL DEFAULT 1")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE bom ADD COLUMN component_type TEXT NOT NULL DEFAULT 'item'")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE bom ADD COLUMN child_product_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE order_jobs ADD COLUMN job_product_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE items ADD COLUMN stock_quantity REAL NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE items ADD COLUMN min_stock REAL NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE orders ADD COLUMN materials_reserved INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE order_jobs ADD COLUMN planned_start TEXT")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE order_jobs ADD COLUMN planned_end TEXT")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE workstations ADD COLUMN color TEXT NOT NULL DEFAULT '#3b82f6'")
-    except sqlite3.OperationalError:
-        pass
-    
+    # ---------------------------
+    # PURCHASE REQUESTS TABLE
+    # ---------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS purchase_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER NOT NULL,
+        request_number TEXT,
+        item_id INTEGER,
+        supplier_id INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        quantity REAL NOT NULL,
+        unit TEXT,
+        status TEXT DEFAULT 'draft',
+        priority TEXT DEFAULT 'normal',
+        needed_by DATE,
+        requested_by INTEGER,
+        approved_by INTEGER,
+        ordered_by INTEGER,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id),
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+        FOREIGN KEY (item_id) REFERENCES items(id),
+        FOREIGN KEY (requested_by) REFERENCES users(id)
+    )
+    """)
 
 
-    try:
-        cursor.execute("ALTER TABLE order_jobs ADD COLUMN parent_job_id INTEGER")
-    except sqlite3.OperationalError:
-        pass
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS dashboard_layouts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        company_id INTEGER NOT NULL,
+        page_key TEXT NOT NULL DEFAULT 'dashboard',
+        layout_json TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, company_id, page_key),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (company_id) REFERENCES companies(id)
+    )
+    """)
 
-    try:
-        cursor.execute("ALTER TABLE order_jobs ADD COLUMN is_split_child INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    # Backward-compatible ALTERs for existing DB
+    alter_statements = [
+        "ALTER TABLE users ADD COLUMN company_id INTEGER",
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
+
+        "ALTER TABLE orders ADD COLUMN product_id INTEGER",
+        "ALTER TABLE orders ADD COLUMN quantity REAL DEFAULT 1",
+        "ALTER TABLE orders ADD COLUMN materials_reserved INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE orders ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE items ADD COLUMN stock_quantity REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN min_stock REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE products ADD COLUMN measurement_unit TEXT NOT NULL DEFAULT 'pcs'",
+        "ALTER TABLE products ADD COLUMN stock_quantity REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN time_per_unit REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE products ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE bom ADD COLUMN component_type TEXT NOT NULL DEFAULT 'item'",
+        "ALTER TABLE bom ADD COLUMN child_product_id INTEGER",
+        "ALTER TABLE bom ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE workstations ADD COLUMN color TEXT NOT NULL DEFAULT '#3b82f6'",
+        "ALTER TABLE workstations ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE product_job_templates ADD COLUMN company_id INTEGER",
+
+        "ALTER TABLE order_jobs ADD COLUMN job_product_id INTEGER",
+        "ALTER TABLE order_jobs ADD COLUMN planned_start TEXT",
+        "ALTER TABLE order_jobs ADD COLUMN planned_end TEXT",
+        "ALTER TABLE order_jobs ADD COLUMN parent_job_id INTEGER",
+        "ALTER TABLE order_jobs ADD COLUMN is_split_child INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE order_jobs ADD COLUMN company_id INTEGER",
+        "ALTER TABLE items ADD COLUMN supplier_id INTEGER",
+    ]
+
+    for sql in alter_statements:
+        try:
+            cursor.execute(sql)
+        except sqlite3.OperationalError:
+            pass
+
+    # Backfill companies from old users.company text
+    cursor.execute("""
+        SELECT DISTINCT TRIM(company)
+        FROM users
+        WHERE company IS NOT NULL
+          AND TRIM(company) != ''
+    """)
+    company_names = [row[0] for row in cursor.fetchall()]
+
+    for company_name in company_names:
+        cursor.execute("""
+            INSERT OR IGNORE INTO companies (name)
+            VALUES (?)
+        """, (company_name,))
+
+    cursor.execute("""
+        UPDATE users
+        SET company_id = (
+            SELECT c.id
+            FROM companies c
+            WHERE c.name = users.company
+        )
+        WHERE company_id IS NULL
+          AND company IS NOT NULL
+          AND TRIM(company) != ''
+    """)
+
+    # Backfill core tables if there is exactly one company and old data exists
+    cursor.execute("SELECT COUNT(*) FROM companies")
+    company_count = cursor.fetchone()[0]
+
+    if company_count == 1:
+        cursor.execute("SELECT id FROM companies LIMIT 1")
+        default_company_id = cursor.fetchone()[0]
+
+        for table_name in [
+            "orders",
+            "items",
+            "products",
+            "bom",
+            "workstations",
+            "product_job_templates",
+            "order_jobs",
+        ]:
+            cursor.execute(f"""
+                UPDATE {table_name}
+                SET company_id = ?
+                WHERE company_id IS NULL
+            """, (default_company_id,))
+
     conn.commit()
     conn.close()
 
@@ -197,13 +338,20 @@ def seed_data():
     count = cursor.fetchone()[0]
 
     if count == 0:
-        cursor.execute("""
-        INSERT INTO orders (order_number, customer, status, due_date, priority)
-        VALUES
-        ('ORD-1001', 'NordSteel', 'In Progress', '2026-03-25', 'High'),
-        ('ORD-1002', 'Baltic Frame', 'Waiting', '2026-03-28', 'Medium'),
-        ('ORD-1003', 'MetalWorks LT', 'Completed', '2026-03-20', 'Low')
-        """)
+        cursor.execute("SELECT COUNT(*) FROM companies")
+        company_count = cursor.fetchone()[0]
+
+        if company_count == 1:
+            cursor.execute("SELECT id FROM companies LIMIT 1")
+            company_id = cursor.fetchone()[0]
+
+            cursor.execute("""
+                INSERT INTO orders (order_number, customer, status, due_date, priority, company_id)
+                VALUES
+                ('ORD-1001', 'NordSteel', 'In Progress', '2026-03-25', 'High', ?),
+                ('ORD-1002', 'Baltic Frame', 'Waiting', '2026-03-28', 'Medium', ?),
+                ('ORD-1003', 'MetalWorks LT', 'Completed', '2026-03-20', 'Low', ?)
+            """, (company_id, company_id, company_id))
 
     conn.commit()
     conn.close()
@@ -211,6 +359,50 @@ def seed_data():
 
 def is_logged_in():
     return "user_id" in session
+
+def get_company_id():
+    company_id = session.get("company_id")
+    if not company_id:
+        raise ValueError("Missing company_id in session.")
+    return company_id
+
+def get_user_role():
+    return session.get("user_role", "user")
+
+
+def ensure_logged_in():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+    return None
+
+
+def fetch_one(cursor, query, params=()):
+    cursor.execute(query, params)
+    return cursor.fetchone()
+
+
+def company_scope_condition(alias=None):
+    column = "company_id" if not alias else f"{alias}.company_id"
+    return f"{column} = ?"
+
+
+def company_params():
+    company_id = get_company_id()
+    if not company_id:
+        raise ValueError("Missing company_id in session.")
+    return (company_id,)
+
+
+def record_belongs_to_company(cursor, table_name, record_id, company_id):
+    query = f"SELECT 1 FROM {table_name} WHERE id = ? AND company_id = ?"
+    cursor.execute(query, (record_id, company_id))
+    return cursor.fetchone() is not None
+
+
+def require_company_record(cursor, table_name, record_id, company_id, not_found_message="Record not found."):
+    if not record_belongs_to_company(cursor, table_name, record_id, company_id):
+        raise ValueError(not_found_message)
+
 
 def redirect_back(default_endpoint="jobs"):
     return redirect(request.referrer or url_for(default_endpoint))
@@ -229,6 +421,12 @@ def calculate_job_duration_days(total_job_hours, hours_per_shift, shifts_per_day
     if total_job_hours <= 0:
         return 1
     return max(1, math.ceil(total_job_hours / daily_capacity))
+
+
+
+
+
+
 
 
 def recalculate_job_dates(cursor, job_id, planned_start=None):
@@ -306,10 +504,40 @@ def build_month_days(year, month):
         })
 
     return month_days
+def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
+    cursor.execute("""
+        SELECT layout_json
+        FROM dashboard_layouts
+        WHERE user_id = ? AND company_id = ? AND page_key = ?
+        LIMIT 1
+    """, (user_id, company_id, page_key))
+    row = cursor.fetchone()
 
-def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_quantity, planned_date=None, path=None):
+    if not row:
+        return []
+
+    try:
+        return json.loads(row[0])
+    except Exception:
+        return []
+
+
+def save_dashboard_layout_record(cursor, user_id, company_id, layout_state, page_key="dashboard"):
+    cursor.execute("""
+        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id, page_key)
+        DO UPDATE SET
+            layout_json = excluded.layout_json,
+            updated_at = CURRENT_TIMESTAMP
+    """, (user_id, company_id, page_key, json.dumps(layout_state)))
+
+def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_quantity, planned_date=None, path=None, company_id=None):
     if path is None:
         path = []
+
+    if company_id is None:
+        raise ValueError("company_id is required for job generation.")
 
     if current_product_id in path:
         raise ValueError("Circular BOM detected.")
@@ -320,10 +548,11 @@ def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_
         SELECT child_product_id, quantity
         FROM bom
         WHERE product_id = ?
+          AND company_id = ?
           AND component_type = 'product'
           AND child_product_id IS NOT NULL
         ORDER BY id ASC
-    """, (current_product_id,))
+    """, (current_product_id, company_id))
     child_rows = cursor.fetchall()
 
     for child_product_id, bom_quantity in child_rows:
@@ -334,15 +563,17 @@ def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_
             child_product_id,
             child_required_quantity,
             planned_date,
-            current_path
+            current_path,
+            company_id
         )
 
     cursor.execute("""
         SELECT id, workstation_id, job_name, sequence, estimated_hours
         FROM product_job_templates
         WHERE product_id = ?
+          AND company_id = ?
         ORDER BY sequence ASC, id ASC
-    """, (current_product_id,))
+    """, (current_product_id, company_id))
     templates = cursor.fetchall()
 
     for template_id, workstation_id, job_name, sequence, estimated_hours in templates:
@@ -359,9 +590,10 @@ def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_
                 estimated_hours,
                 status,
                 planned_start,
-                planned_end
+                planned_end,
+                company_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             order_id,
             template_id,
@@ -374,7 +606,8 @@ def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_
             estimated_hours,
             "Waiting",
             planned_date,
-            planned_date
+            planned_date,
+            company_id
         ))
 
         new_job_id = cursor.lastrowid
@@ -384,243 +617,162 @@ def is_float_equal(a, b, tolerance=0.0001):
     return abs(float(a) - float(b)) <= tolerance
 
 
-def job_has_split_children(cursor, job_id):
+def job_has_split_children(cursor, job_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
-        SELECT COUNT(*)
+        SELECT 1
         FROM order_jobs
         WHERE parent_job_id = ?
           AND is_split_child = 1
-    """, (job_id,))
-    return cursor.fetchone()[0] > 0
+          AND company_id = ?
+        LIMIT 1
+    """, (job_id, company_id))
+    return cursor.fetchone() is not None
 
-def can_start_job(cursor, job_id):
+
+
+def sync_parent_job_status(cursor, parent_job_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
-        SELECT
-            id,
-            order_id,
-            sequence,
-            parent_job_id,
-            is_split_child
+        SELECT id, company_id
         FROM order_jobs
         WHERE id = ?
-    """, (job_id,))
-    job = cursor.fetchone()
+          AND company_id = ?
+    """, (parent_job_id, company_id))
+    parent = cursor.fetchone()
 
-    if job is None:
-        return False
+    if parent is None:
+        return
 
-    order_id = job[1]
-    sequence = int(job[2] or 0)
-    parent_job_id = job[3]
-    is_split_child = int(job[4] or 0)
-
-    if sequence <= 1:
-        return True
-
-    # Jei tai split child job, tikrinam tik ankstesnius executable job'us:
-    # - single job'us
-    # - split child job'us
-    # ir ignoruojam split parent'us
-    if is_split_child == 1:
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM order_jobs prev
-            WHERE prev.order_id = ?
-              AND prev.sequence < ?
-              AND prev.status != 'Done'
-              AND (
-                    prev.is_split_child = 1
-                    OR NOT EXISTS (
-                        SELECT 1
-                        FROM order_jobs child
-                        WHERE child.parent_job_id = prev.id
-                          AND child.is_split_child = 1
-                    )
-                  )
-        """, (order_id, sequence))
-        remaining = cursor.fetchone()[0]
-        return remaining == 0
-
-    # Jei tai paprastas single job arba split parent
-    # tikrinam tik ankstesnius single job'us ir split child job'us,
-    # bet ignoruojam split parent'us
     cursor.execute("""
-        SELECT COUNT(*)
-        FROM order_jobs prev
-        WHERE prev.order_id = ?
-          AND prev.sequence < ?
-          AND prev.status != 'Done'
-          AND (
-                prev.is_split_child = 1
-                OR NOT EXISTS (
-                    SELECT 1
-                    FROM order_jobs child
-                    WHERE child.parent_job_id = prev.id
-                      AND child.is_split_child = 1
-                )
-              )
-    """, (order_id, sequence))
-    remaining = cursor.fetchone()[0]
-
-    return remaining == 0
-
-def sync_parent_job_status(cursor, parent_job_id):
-    cursor.execute("""
-        SELECT id, planned_quantity, completed_quantity, status
+        SELECT status, completed_quantity, planned_quantity
         FROM order_jobs
         WHERE parent_job_id = ?
           AND is_split_child = 1
-        ORDER BY id ASC
-    """, (parent_job_id,))
-    children = cursor.fetchall()
+          AND company_id = ?
+    """, (parent_job_id, company_id))
+    child_rows = cursor.fetchall()
 
-    if not children:
+    if not child_rows:
         return
 
-    total_planned = sum(float(row[1] or 0) for row in children)
-    total_completed = sum(float(row[2] or 0) for row in children)
-    child_statuses = [row[3] for row in children]
+    statuses = [row[0] for row in child_rows]
+    all_done = all(status == "Done" for status in statuses)
+    any_ongoing = any(status == "Ongoing" for status in statuses)
+    any_paused = any(status == "Paused" for status in statuses)
+    any_waiting = any(status == "Waiting" for status in statuses)
 
-    if all(status == "Done" for status in child_statuses):
-        parent_status = "Done"
-    elif any(status == "Ongoing" for status in child_statuses):
-        parent_status = "Ongoing"
-    elif any(status == "Paused" for status in child_statuses):
-        parent_status = "Paused"
+    total_completed = sum(float(row[1] or 0) for row in child_rows)
+    total_planned = sum(float(row[2] or 0) for row in child_rows)
+
+    if all_done:
+        new_status = "Done"
+    elif any_ongoing:
+        new_status = "Ongoing"
+    elif any_paused:
+        new_status = "Paused"
+    elif any_waiting:
+        new_status = "Paused"
     else:
-        parent_status = "Waiting"
+        new_status = "Paused"
 
     cursor.execute("""
         UPDATE order_jobs
-        SET completed_quantity = ?, status = ?
+        SET completed_quantity = ?, planned_quantity = ?, status = ?
         WHERE id = ?
-    """, (total_completed, parent_status, parent_job_id))
+          AND company_id = ?
+    """, (total_completed, total_planned, new_status, parent_job_id, company_id))
 
 
-def can_start_job(cursor, job_id):
+def can_start_job(cursor, job_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
-        SELECT
-            id,
-            order_id,
-            sequence,
-            parent_job_id,
-            is_split_child
+        SELECT order_id, sequence, parent_job_id, is_split_child
         FROM order_jobs
         WHERE id = ?
-    """, (job_id,))
-    job = cursor.fetchone()
+          AND company_id = ?
+    """, (job_id, company_id))
+    row = cursor.fetchone()
 
-    if job is None:
+    if row is None:
         return False
 
-    order_id = job[1]
-    sequence = int(job[2] or 0)
-    is_split_child = int(job[4] or 0)
+    order_id, sequence, parent_job_id, is_split_child = row
 
-    if sequence <= 1:
-        return True
-
-    # Split child atveju tikrinam tik realiai vykdomus ankstesnius job'us
-    if is_split_child == 1:
+    if parent_job_id:
         cursor.execute("""
-            SELECT COUNT(*)
-            FROM order_jobs prev
-            WHERE prev.order_id = ?
-              AND prev.sequence < ?
-              AND prev.status != 'Done'
-              AND (
-                    prev.is_split_child = 1
-                    OR NOT EXISTS (
-                        SELECT 1
-                        FROM order_jobs child
-                        WHERE child.parent_job_id = prev.id
-                          AND child.is_split_child = 1
-                    )
-                  )
-        """, (order_id, sequence))
-        remaining = cursor.fetchone()[0]
-        return remaining == 0
+            SELECT status
+            FROM order_jobs
+            WHERE id = ?
+              AND company_id = ?
+        """, (parent_job_id, company_id))
+        parent_row = cursor.fetchone()
 
-    # Single job arba split parent tikrina ankstesnius vykdomus job'us,
-    # bet ignoruoja split parent'us, kurie turi child'us
+        if parent_row and parent_row[0] not in ("Paused", "Ongoing", "Done"):
+            return False
+
     cursor.execute("""
         SELECT COUNT(*)
-        FROM order_jobs prev
-        WHERE prev.order_id = ?
-          AND prev.sequence < ?
-          AND prev.status != 'Done'
-          AND (
-                prev.is_split_child = 1
-                OR NOT EXISTS (
-                    SELECT 1
-                    FROM order_jobs child
-                    WHERE child.parent_job_id = prev.id
-                      AND child.is_split_child = 1
-                )
-              )
-    """, (order_id, sequence))
-    remaining = cursor.fetchone()[0]
+        FROM order_jobs
+        WHERE order_id = ?
+          AND company_id = ?
+          AND sequence < ?
+          AND status != 'Done'
+          AND is_split_child = 0
+    """, (order_id, company_id, sequence))
+    blocked_count = cursor.fetchone()[0]
 
-    return remaining == 0
+    return blocked_count == 0
 
 
-def sync_order_status(cursor, order_id):
+def sync_order_status(cursor, order_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
-        SELECT
-            oj.id,
-            oj.status,
-            oj.is_split_child,
-            (
-                SELECT COUNT(*)
-                FROM order_jobs child
-                WHERE child.parent_job_id = oj.id
-                  AND child.is_split_child = 1
-            ) AS child_count
-        FROM order_jobs oj
-        WHERE oj.order_id = ?
-    """, (order_id,))
-    jobs = cursor.fetchall()
+        SELECT status
+        FROM order_jobs
+        WHERE order_id = ?
+          AND company_id = ?
+    """, (order_id, company_id))
+    rows = cursor.fetchall()
 
-    if not jobs:
+    if not rows:
         cursor.execute("""
             UPDATE orders
             SET status = 'Waiting'
             WHERE id = ?
-        """, (order_id,))
+              AND company_id = ?
+        """, (order_id, company_id))
         return
 
-    executable_statuses = []
+    statuses = [row[0] for row in rows]
 
-    for job in jobs:
-        job_status = job[1]
-        is_split_child = int(job[2] or 0)
-        child_count = int(job[3] or 0)
-
-        # Split parent ignoruojam, nes jis tik reference
-        if is_split_child == 0 and child_count > 0:
-            continue
-
-        executable_statuses.append(job_status)
-
-    if not executable_statuses:
-        new_order_status = "Waiting"
-    elif all(status == "Done" for status in executable_statuses):
-        new_order_status = "Completed"
-    elif any(status == "Ongoing" for status in executable_statuses):
-        new_order_status = "In Progress"
-    elif any(status == "Paused" for status in executable_statuses):
-        new_order_status = "Delayed"
+    if all(status == "Done" for status in statuses):
+        order_status = "Completed"
+    elif any(status in ("Ongoing", "Paused") for status in statuses):
+        order_status = "In Progress"
     else:
-        new_order_status = "Waiting"
+        order_status = "Waiting"
 
     cursor.execute("""
         UPDATE orders
         SET status = ?
         WHERE id = ?
-    """, (new_order_status, order_id))
+          AND company_id = ?
+    """, (order_status, order_id, company_id))
 
 
-def create_split_children(cursor, parent_job_id, split_rows):
+def create_split_children(cursor, parent_job_id, split_rows, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
         SELECT
             id,
@@ -634,23 +786,29 @@ def create_split_children(cursor, parent_job_id, split_rows):
             completed_quantity,
             estimated_hours,
             status,
-            planned_start
+            planned_start,
+            planned_end,
+            parent_job_id,
+            is_split_child
         FROM order_jobs
         WHERE id = ?
-    """, (parent_job_id,))
+          AND company_id = ?
+    """, (parent_job_id, company_id))
     parent = cursor.fetchone()
 
     if parent is None:
         raise ValueError("Parent job not found.")
 
+    if int(parent[14] or 0) == 1:
+        raise ValueError("Split child job cannot be split again.")
+
     if float(parent[8] or 0) > 0:
         raise ValueError("Cannot split job that already has completed quantity.")
 
-    if job_has_split_children(cursor, parent_job_id):
+    if job_has_split_children(cursor, parent_job_id, company_id=company_id):
         raise ValueError("Job is already split.")
 
     parent_planned_quantity = float(parent[7] or 0)
-
     total_split_quantity = sum(float(row["quantity"]) for row in split_rows)
 
     if not is_float_equal(total_split_quantity, parent_planned_quantity):
@@ -659,6 +817,8 @@ def create_split_children(cursor, parent_job_id, split_rows):
     for row in split_rows:
         workstation_id = int(row["workstation_id"])
         split_quantity = float(row["quantity"])
+
+        require_company_record(cursor, "workstations", workstation_id, company_id, "Workstation not found.")
 
         cursor.execute("""
             INSERT INTO order_jobs (
@@ -675,24 +835,26 @@ def create_split_children(cursor, parent_job_id, split_rows):
                 planned_start,
                 planned_end,
                 parent_job_id,
-                is_split_child
+                is_split_child,
+                company_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            parent[1],                  # order_id
-            parent[2],                  # product_job_template_id
-            parent[3],                  # job_product_id
-            workstation_id,             # workstation_id
-            parent[5],                  # job_name
-            parent[6],                  # sequence
-            split_quantity,             # planned_quantity
-            0,                          # completed_quantity
-            parent[9],                  # estimated_hours
-            "Waiting",                  # status
-            parent[11],                 # planned_start
-            parent[11],                 # planned_end
-            parent_job_id,              # parent_job_id
-            1                           # is_split_child
+            parent[1],          # order_id
+            parent[2],          # product_job_template_id
+            parent[3],          # job_product_id
+            workstation_id,
+            parent[5],          # job_name
+            parent[6],          # sequence
+            split_quantity,
+            0,
+            parent[9],          # estimated_hours
+            "Waiting",
+            parent[11],         # planned_start
+            parent[12],         # planned_end
+            parent_job_id,
+            1,
+            company_id
         ))
 
         new_child_id = cursor.lastrowid
@@ -702,21 +864,40 @@ def create_split_children(cursor, parent_job_id, split_rows):
         UPDATE order_jobs
         SET status = 'Paused'
         WHERE id = ?
-    """, (parent_job_id,))
+          AND company_id = ?
+    """, (parent_job_id, company_id))
 
-    sync_parent_job_status(cursor, parent_job_id)
+    sync_parent_job_status(cursor, parent_job_id, company_id=company_id)
 
 
-def rebuild_order_jobs(cursor, order_id, root_product_id, root_quantity, planned_date=None):
-    cursor.execute("DELETE FROM order_jobs WHERE order_id = ?", (order_id,))
-    generate_order_jobs_recursive(cursor, order_id, root_product_id, root_quantity, planned_date)
+def rebuild_order_jobs(cursor, order_id, root_product_id, root_quantity, planned_date=None, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
 
-def explode_bom_items_recursive(cursor, product_id, required_quantity, collected=None, path=None):
+    cursor.execute("""
+        DELETE FROM order_jobs
+        WHERE order_id = ?
+          AND company_id = ?
+    """, (order_id, company_id))
+
+    generate_order_jobs_recursive(
+        cursor,
+        order_id,
+        root_product_id,
+        root_quantity,
+        planned_date,
+        company_id=company_id
+    )
+
+def explode_bom_items_recursive(cursor, product_id, required_quantity, collected=None, path=None, company_id=None):
     if collected is None:
         collected = {}
 
     if path is None:
         path = []
+
+    if company_id is None:
+        raise ValueError("company_id is required.")
 
     if product_id in path:
         raise ValueError("Circular BOM detected.")
@@ -731,8 +912,9 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
             quantity
         FROM bom
         WHERE product_id = ?
+          AND company_id = ?
         ORDER BY id ASC
-    """, (product_id,))
+    """, (product_id, company_id))
     rows = cursor.fetchall()
 
     for component_type, item_id, child_product_id, bom_quantity in rows:
@@ -745,7 +927,8 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
                 child_product_id,
                 total_required,
                 collected,
-                current_path
+                current_path,
+                company_id
             )
         else:
             if item_id not in collected:
@@ -754,23 +937,68 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
 
     return collected
 
-def consume_job_materials(cursor, product_id, produced_quantity):
+
+
+def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
+    cursor.execute("""
+        SELECT layout_json
+        FROM dashboard_layouts
+        WHERE user_id = ? AND company_id = ? AND page_key = ?
+        LIMIT 1
+    """, (user_id, company_id, page_key))
+    row = cursor.fetchone()
+
+    if not row:
+        return []
+
+    try:
+        return json.loads(row[0])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def save_dashboard_layout_record(cursor, user_id, company_id, layout_order, page_key="dashboard"):
+    layout_json = json.dumps(layout_order)
+
+    cursor.execute("""
+        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id, page_key)
+        DO UPDATE SET
+            layout_json = excluded.layout_json,
+            updated_at = CURRENT_TIMESTAMP
+    """, (user_id, company_id, page_key, layout_json))
+
+
+def consume_job_materials(cursor, product_id, produced_quantity, company_id=None):
     produced_quantity = float(produced_quantity or 0)
+
+    if company_id is None:
+        raise ValueError("company_id is required.")
 
     if not product_id or produced_quantity <= 0:
         return
 
-    exploded_items = explode_bom_items_recursive(cursor, product_id, produced_quantity)
+    exploded_items = explode_bom_items_recursive(
+        cursor,
+        product_id,
+        produced_quantity,
+        company_id=company_id
+    )
 
     for item_id, required_quantity in exploded_items.items():
         cursor.execute("""
             UPDATE items
             SET stock_quantity = COALESCE(stock_quantity, 0) - ?
             WHERE id = ?
-        """, (float(required_quantity or 0), item_id))
+              AND company_id = ?
+        """, (float(required_quantity or 0), item_id, company_id))
 
-def add_finished_product_stock(cursor, product_id, produced_quantity):
+def add_finished_product_stock(cursor, product_id, produced_quantity, company_id=None):
     produced_quantity = float(produced_quantity or 0)
+
+    if company_id is None:
+        raise ValueError("company_id is required.")
 
     if not product_id or produced_quantity <= 0:
         return
@@ -779,37 +1007,96 @@ def add_finished_product_stock(cursor, product_id, produced_quantity):
         UPDATE products
         SET stock_quantity = COALESCE(stock_quantity, 0) + ?
         WHERE id = ?
-    """, (produced_quantity, product_id))
+          AND company_id = ?
+    """, (produced_quantity, product_id, company_id))
 
-def is_final_job(cursor, order_id, job_id):
+def is_final_job(cursor, order_id, job_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
     cursor.execute("""
         SELECT MAX(sequence)
         FROM order_jobs
         WHERE order_id = ?
-    """, (order_id,))
+          AND company_id = ?
+    """, (order_id, company_id))
     max_sequence = cursor.fetchone()[0]
 
     cursor.execute("""
         SELECT sequence
         FROM order_jobs
         WHERE id = ?
-    """, (job_id,))
-    job_sequence = cursor.fetchone()[0]
+          AND company_id = ?
+    """, (job_id, company_id))
+    row = cursor.fetchone()
 
+    if row is None:
+        return False
+
+    job_sequence = row[0]
     return job_sequence == max_sequence
 
 
-def reserve_order_materials(cursor, order_id):
-    """
-    Orders no longer affect inventory.
-    This function is kept only for compatibility.
-    """
+def reserve_order_materials(cursor, order_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
+    cursor.execute("""
+        SELECT 1
+        FROM orders
+        WHERE id = ?
+          AND company_id = ?
+        LIMIT 1
+    """, (order_id, company_id))
+    exists = cursor.fetchone()
+
+    if not exists:
+        raise ValueError("Order not found.")
+
+    # Orders currently do not reserve stock.
+    # Kept for compatibility and future extension.
     return False
 
+def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
+    cursor.execute("""
+        SELECT layout_json
+        FROM dashboard_layouts
+        WHERE user_id = ? AND company_id = ? AND page_key = ?
+        LIMIT 1
+    """, (user_id, company_id, page_key))
+    row = cursor.fetchone()
 
-def calculate_product_material_cost(cursor, product_id):
+    if not row:
+        return []
+
     try:
-        exploded_items = explode_bom_items_recursive(cursor, product_id, 1)
+        return json.loads(row[0])
+    except Exception:
+        return []
+
+
+def save_dashboard_layout_record(cursor, user_id, company_id, layout_state, page_key="dashboard"):
+    cursor.execute("""
+        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id, page_key)
+        DO UPDATE SET
+            layout_json = excluded.layout_json,
+            updated_at = CURRENT_TIMESTAMP
+    """, (user_id, company_id, page_key, json.dumps(layout_state)))
+
+
+def calculate_product_material_cost(cursor, product_id, company_id=None):
+    if company_id is None:
+        raise ValueError("company_id is required.")
+
+    try:
+        exploded_items = explode_bom_items_recursive(
+            cursor,
+            product_id,
+            1,
+            company_id=company_id
+        )
     except ValueError:
         return 0
 
@@ -823,7 +1110,8 @@ def calculate_product_material_cost(cursor, product_id):
         SELECT id, unit_price
         FROM items
         WHERE id IN ({placeholders})
-    """, item_ids)
+          AND company_id = ?
+    """, item_ids + [company_id])
     rows = cursor.fetchall()
 
     total_material_cost = 0
@@ -833,6 +1121,187 @@ def calculate_product_material_cost(cursor, product_id):
         total_material_cost += quantity_per_unit * (unit_price or 0)
 
     return total_material_cost
+
+
+from functools import wraps
+
+ROLE_DEFAULT_PERMISSIONS = {
+    "admin": {
+        "view_dashboard",
+        "view_orders", "manage_orders",
+        "view_jobs", "update_job_progress", "manage_jobs",
+        "view_inventory", "manage_inventory",
+        "view_products", "manage_products",
+        "view_items", "manage_items",
+        "view_workstations", "manage_workstations",
+        "view_reports", "export_data",
+        "manage_users",
+        "manage_procurement",
+        "view_suppliers",
+        "manage_suppliers",
+        "view_procurement",
+        "manage_procurement",
+    },
+    "manager": {
+        "view_dashboard",
+        "view_orders", "manage_orders",
+        "view_jobs", "update_job_progress", "manage_jobs",
+        "view_inventory", "manage_inventory",
+        "view_products", "manage_products",
+        "view_items", "manage_items",
+        "view_workstations", "manage_workstations",
+        "view_reports", "export_data",
+        "manage_procurement",
+        "view_suppliers",
+        "manage_suppliers",
+        "view_procurement",
+    },
+    "worker": {
+        "view_dashboard",
+        "view_jobs",
+        "update_job_progress",
+        "view_procurement",
+    },
+}
+
+ALL_PERMISSION_KEYS = [
+    "view_dashboard",
+    "view_orders",
+    "manage_orders",
+    "view_jobs",
+    "update_job_progress",
+    "manage_jobs",
+    "view_inventory",
+    "manage_inventory",
+    "view_products",
+    "manage_products",
+    "view_items",
+    "manage_items",
+    "view_workstations",
+    "manage_workstations",
+    "view_reports",
+    "export_data",
+    "manage_users",
+    "manage_procurement",
+    "view_suppliers",
+    "manage_suppliers",
+    "view_procurement",
+    "manage_procurement",
+]
+
+
+def get_current_user_role():
+    return (session.get("user_role") or "worker").strip().lower()
+
+
+def get_role_default_permissions(role):
+    return set(ROLE_DEFAULT_PERMISSIONS.get((role or "worker").lower(), set()))
+
+
+def get_user_permission_overrides(user_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT permission_key, allowed
+        FROM user_permissions
+        WHERE user_id = ?
+    """, (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    overrides = {}
+    for permission_key, allowed in rows:
+        overrides[permission_key] = bool(allowed)
+
+    return overrides
+
+
+def get_effective_permissions(user_id=None, role=None):
+    if user_id is None:
+        user_id = session.get("user_id")
+    if role is None:
+        role = get_current_user_role()
+
+    permissions = set(get_role_default_permissions(role))
+    overrides = get_user_permission_overrides(user_id)
+
+    for permission_key, allowed in overrides.items():
+        if allowed:
+            permissions.add(permission_key)
+        else:
+            permissions.discard(permission_key)
+
+    return permissions
+
+
+def has_permission(permission_key, user_id=None, role=None):
+    return permission_key in get_effective_permissions(user_id=user_id, role=role)
+
+
+def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
+    cursor.execute("""
+        SELECT layout_json
+        FROM dashboard_layouts
+        WHERE user_id = ? AND company_id = ? AND page_key = ?
+        LIMIT 1
+    """, (user_id, company_id, page_key))
+    row = cursor.fetchone()
+
+    if not row:
+        return []
+
+    try:
+        return json.loads(row[0])
+    except Exception:
+        return []
+
+
+def save_dashboard_layout_record(cursor, user_id, company_id, layout_order, page_key="dashboard"):
+    cursor.execute("""
+        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id, page_key)
+        DO UPDATE SET
+            layout_json = excluded.layout_json,
+            updated_at = CURRENT_TIMESTAMP
+    """, (user_id, company_id, page_key, json.dumps(layout_order)))
+
+def permission_required(permission_key):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapped_view(*args, **kwargs):
+            if not is_logged_in():
+                return redirect(url_for("login"))
+
+            if not has_permission(permission_key):
+                flash("You do not have permission to access this page.", "error")
+                return redirect(url_for("dashboard"))
+
+            return view_func(*args, **kwargs)
+        return wrapped_view
+    return decorator
+
+
+@app.context_processor
+def inject_permissions():
+    if not session.get("user_id"):
+        return {
+            "current_user_role": None,
+            "effective_permissions": set(),
+            "has_permission_ui": lambda permission_key: False,
+            "all_permission_keys": ALL_PERMISSION_KEYS,
+        }
+
+    effective_permissions = get_effective_permissions()
+
+    return {
+        "current_user_role": get_current_user_role(),
+        "effective_permissions": effective_permissions,
+        "has_permission_ui": lambda permission_key: permission_key in effective_permissions,
+        "all_permission_keys": ALL_PERMISSION_KEYS,
+    }
+
 
 @app.route("/")
 def home():
@@ -844,65 +1313,95 @@ def landing():
     return render_template("index.html")
 
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form["email"]
+        email = request.form["email"].strip()
         password = request.form["password"]
 
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT id, full_name, email
+            SELECT id, full_name, email, password, company_id, role
             FROM users
-            WHERE email = ? AND password = ?
-        """, (email, password))
-
+            WHERE email = ?
+        """, (email,))
         user = cursor.fetchone()
         conn.close()
 
-        if user:
+        if user and check_password_hash(user[3], password):
+            if not user[4]:
+                flash("This account is not linked to a company.", "error")
+                return render_template("login.html", error="This account is not linked to a company.")
+
             session["user_id"] = user[0]
             session["user_name"] = user[1]
             session["user_email"] = user[2]
+            session["company_id"] = user[4]
+            session["user_role"] = user[5] or "user"
+
             return redirect(url_for("dashboard"))
-        else:
-            flash("Invalid email or password", "error")
-            return render_template("login.html", error="Invalid email or password")
+
+        flash("Invalid email or password", "error")
+        return render_template("login.html", error="Invalid email or password")
 
     return render_template("login.html")
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        full_name = request.form["full_name"]
-        company = request.form["company"]
-        email = request.form["email"]
+        full_name = request.form["full_name"].strip()
+        company_name = request.form["company"].strip()
+        email = request.form["email"].strip()
         password = request.form["password"]
         confirm_password = request.form["confirm_password"]
 
+        if not full_name or not company_name or not email or not password:
+            return render_template("register.html", error="All fields are required")
+
         if password != confirm_password:
             return render_template("register.html", error="Passwords do not match")
+
+        hashed_password = generate_password_hash(password)
 
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                INSERT INTO users (full_name, company, email, password)
-                VALUES (?, ?, ?, ?)
-            """, (full_name, company, email, password))
+                SELECT id FROM users WHERE email = ?
+            """, (email,))
+            existing_user = cursor.fetchone()
+
+            if existing_user:
+                conn.close()
+                flash("Email already exists.", "error")
+                return render_template("register.html", error="Email already exists")
+
+            cursor.execute("""
+                INSERT INTO companies (name)
+                VALUES (?)
+            """, (company_name,))
+            company_id = cursor.lastrowid
+
+            cursor.execute("""
+                INSERT INTO users (full_name, company, email, password, company_id, role)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (full_name, company_name, email, hashed_password, company_id, "admin"))
 
             conn.commit()
             conn.close()
 
+            flash("Account created successfully. You can now log in.", "success")
             return redirect(url_for("login"))
+
         except sqlite3.IntegrityError:
+            conn.rollback()
             conn.close()
-            flash("Email already exists.", "error")
-            return render_template("register.html", error="Email already exists")
+            flash("Company or email already exists.", "error")
+            return render_template("register.html", error="Company or email already exists")
 
     return render_template("register.html")
 
@@ -913,38 +1412,80 @@ def logout():
     flash("You have been logged out.", "info")
     return redirect(url_for("login"))
 
-
 @app.route("/dashboard")
 def dashboard():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM orders")
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE company_id = ?
+    """, (company_id,))
     total_orders = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'In Progress'")
-    in_progress_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'Waiting'")
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE status = 'Waiting' AND company_id = ?
+    """, (company_id,))
     waiting_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'Completed'")
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE status = 'Completed' AND company_id = ?
+    """, (company_id,))
     completed_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE status = 'Delayed'")
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE status = 'In Progress' AND company_id = ?
+    """, (company_id,))
+    in_progress_count = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM order_jobs
+        WHERE status = 'Delayed' AND company_id = ?
+    """, (company_id,))
     delayed_count = cursor.fetchone()[0]
 
     cursor.execute("""
-        SELECT orders.id, orders.order_number, products.product_name, orders.quantity, orders.status, orders.due_date, orders.priority
-        FROM orders
-        LEFT JOIN products ON orders.product_id = products.id
-        ORDER BY orders.id DESC
-        LIMIT 5
-    """)
-    recent_rows = cursor.fetchall()
+        SELECT
+            o.id,
+            o.order_number,
+            COALESCE(p.product_name, '-') AS product_name,
+            o.quantity,
+            o.status,
+            o.due_date
+        FROM orders o
+        LEFT JOIN products p
+          ON o.product_id = p.id
+         AND p.company_id = o.company_id
+        WHERE o.company_id = ?
+        ORDER BY o.id DESC
+        LIMIT 10
+    """, (company_id,))
+    order_rows = cursor.fetchall()
+
+    recent_orders = []
+    for row in order_rows:
+        recent_orders.append({
+            "id": row[0],
+            "order_number": row[1],
+            "product_name": row[2],
+            "quantity": row[3],
+            "status": row[4],
+            "due_date": row[5]
+        })
 
     cursor.execute("""
         SELECT
@@ -961,267 +1502,154 @@ def dashboard():
                 )
                 FROM order_jobs oj
                 WHERE oj.workstation_id = w.id
+                  AND oj.company_id = w.company_id
                   AND oj.status != 'Done'
                   AND (
-                        oj.is_split_child = 1
-                        OR NOT EXISTS (
-                            SELECT 1
-                            FROM order_jobs child
-                            WHERE child.parent_job_id = oj.id
-                              AND child.is_split_child = 1
-                        )
-                      )
+                        oj.status = 'Waiting'
+                        OR oj.status = 'Ongoing'
+                        OR oj.status = 'Paused'
+                        OR oj.status = 'Delayed'
+                  )
             ), 0) AS used_load
         FROM workstations w
-        GROUP BY w.id, w.name, w.hours_per_shift, w.shifts_per_day, w.working_days_per_month
-        HAVING used_load > 0
-        ORDER BY used_load DESC, w.name ASC
-    """)
+        WHERE w.company_id = ?
+        ORDER BY w.name ASC
+    """, (company_id,))
     workstation_rows = cursor.fetchall()
 
-    conn.close()
-
-    recent_orders = []
-    for row in recent_rows:
-        recent_orders.append({
-            "id": row[0],
-            "order_number": row[1],
-            "product_name": row[2] if row[2] else "-",
-            "quantity": row[3] if row[3] is not None else 1,
-            "status": row[4],
-            "due_date": row[5],
-            "priority": row[6]
-        })
-
     workstation_load = []
-    workstation_count = len(workstation_rows)
-
-    if workstation_count <= 2:
-        ring_size_class = "load-size-large"
-    elif workstation_count <= 4:
-        ring_size_class = "load-size-medium"
-    elif workstation_count <= 8:
-        ring_size_class = "load-size-small"
-    else:
-        ring_size_class = "load-size-xsmall"
-
     for row in workstation_rows:
         monthly_capacity = float(row[2] or 0)
         used_load = float(row[3] or 0)
-        load_percent = (used_load / monthly_capacity * 100) if monthly_capacity > 0 else 0
+        load_percent = round((used_load / monthly_capacity) * 100) if monthly_capacity > 0 else 0
 
         workstation_load.append({
             "id": row[0],
             "name": row[1],
             "monthly_capacity": round(monthly_capacity, 2),
             "used_load": round(used_load, 2),
-            "load_percent": round(load_percent, 1),
-            "size_class": ring_size_class
+            "load_percent": load_percent
         })
+
+    saved_dashboard_layout = get_dashboard_layout(cursor, user_id, company_id, "dashboard")
+
+    conn.close()
 
     return render_template(
         "dashboard.html",
+        active_page="dashboard",
         total_orders=total_orders,
-        in_progress_count=in_progress_count,
         waiting_count=waiting_count,
         completed_count=completed_count,
+        in_progress_count=in_progress_count,
         delayed_count=delayed_count,
         recent_orders=recent_orders,
         workstation_load=workstation_load,
-        active_page="dashboard"
+        saved_dashboard_layout=saved_dashboard_layout
     )
 
 
 @app.route("/orders")
+@permission_required("view_orders")
 def orders():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+
     order_number = request.args.get("order_number", "").strip()
     product_name = request.args.get("product_name", "").strip()
+    statuses = request.args.getlist("status")
     priority = request.args.get("priority", "").strip()
     due_date_from = request.args.get("due_date_from", "").strip()
     due_date_to = request.args.get("due_date_to", "").strip()
 
-    statuses = request.args.getlist("status")
-    statuses = [s.strip() for s in statuses if s.strip()]
-
     conn = sqlite3.connect("database.db")
-    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     query = """
         SELECT
             o.id,
             o.order_number,
-            o.customer,
+            p.product_name,
+            o.quantity,
             o.status,
             o.due_date,
-            o.priority,
-            o.product_id,
-            o.quantity,
-            p.product_name
+            o.priority
         FROM orders o
-        LEFT JOIN products p ON o.product_id = p.id
+        LEFT JOIN products p
+          ON o.product_id = p.id
+         AND p.company_id = o.company_id
+        WHERE o.company_id = ?
     """
 
-    conditions = []
-    params = []
+    params = [company_id]
 
     if order_number:
-        conditions.append("o.order_number LIKE ?")
+        query += " AND o.order_number LIKE ?"
         params.append(f"%{order_number}%")
 
     if product_name:
-        conditions.append("p.product_name LIKE ?")
+        query += " AND p.product_name LIKE ?"
         params.append(f"%{product_name}%")
 
-    if priority:
-        conditions.append("o.priority = ?")
-        params.append(priority)
-
-    if "All" in statuses:
-        statuses = []
-
-    if statuses:
-        placeholders = ",".join("?" for _ in statuses)
-        conditions.append(f"o.status IN ({placeholders})")
+    if statuses and "All" not in statuses:
+        placeholders = ",".join(["?"] * len(statuses))
+        query += f" AND o.status IN ({placeholders})"
         params.extend(statuses)
 
+    if priority:
+        query += " AND o.priority = ?"
+        params.append(priority)
+
     if due_date_from:
-        conditions.append("o.due_date >= ?")
+        query += " AND o.due_date >= ?"
         params.append(due_date_from)
 
     if due_date_to:
-        conditions.append("o.due_date <= ?")
+        query += " AND o.due_date <= ?"
         params.append(due_date_to)
-
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
 
     query += " ORDER BY o.id DESC"
 
     cursor.execute(query, params)
-    orders = cursor.fetchall()
-
+    rows = cursor.fetchall()
     conn.close()
 
-    filters = {
-        "order_number": order_number,
-        "product_name": product_name,
-        "priority": priority,
-        "status": statuses,
-        "due_date_from": due_date_from,
-        "due_date_to": due_date_to
-    }
+    orders = []
+    for row in rows:
+        orders.append({
+            "id": row[0],
+            "order_number": row[1],
+            "product_name": row[2] if row[2] else "-",
+            "quantity": row[3],
+            "status": row[4],
+            "due_date": row[5],
+            "priority": row[6]
+        })
 
     return render_template(
         "orders.html",
         orders=orders,
-        filters=filters,
-        active_page="orders"
+        active_page="orders",
+        filters={
+            "order_number": order_number,
+            "product_name": product_name,
+            "status": statuses,
+            "priority": priority,
+            "due_date_from": due_date_from,
+            "due_date_to": due_date_to
+        }
     )
 
 
 @app.route("/orders/new", methods=["GET", "POST"])
+@permission_required("manage_orders")
 def new_order():
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-
-    if request.method == "POST":
-        order_number = request.form.get("order_number", "").strip()
-        product_id = request.form.get("product_id", "").strip()
-        quantity_raw = request.form.get("quantity", "").strip()
-        status = request.form.get("status", "").strip()
-        due_date = request.form.get("due_date", "").strip()
-        priority = request.form.get("priority", "").strip()
-
-        if not order_number:
-            conn.close()
-            flash("Order number is required.", "error")
-            return redirect(url_for("new_order"))
-
-        if not product_id:
-            conn.close()
-            flash("Product is required.", "error")
-            return redirect(url_for("new_order"))
-
-        if not quantity_raw:
-            conn.close()
-            flash("Quantity is required.", "error")
-            return redirect(url_for("new_order"))
-
-        try:
-            quantity = float(quantity_raw)
-        except ValueError:
-            conn.close()
-            flash("Quantity must be a valid number.", "error")
-            return redirect(url_for("new_order"))
-
-        if quantity <= 0:
-            conn.close()
-            flash("Quantity must be greater than 0.", "error")
-            return redirect(url_for("new_order"))
-
-        if not status:
-            conn.close()
-            flash("Status is required.", "error")
-            return redirect(url_for("new_order"))
-
-        if not due_date:
-            conn.close()
-            flash("Due date is required.", "error")
-            return redirect(url_for("new_order"))
-
-        if not priority:
-            conn.close()
-            flash("Priority is required.", "error")
-            return redirect(url_for("new_order"))
-
-        cursor.execute("""
-            INSERT INTO orders (order_number, customer, product_id, quantity, status, due_date, priority)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (order_number, "", product_id, quantity, status, due_date, priority))
-
-        order_id = cursor.lastrowid
-
-        try:
-            generate_order_jobs_recursive(cursor, order_id, int(product_id), quantity, due_date)
-        except ValueError as e:
-            conn.rollback()
-            conn.close()
-            flash(str(e), "error")
-            return redirect(url_for("new_order"))
-
-        conn.commit()
-        conn.close()
-
-        flash("Order created successfully.", "success")
-        return redirect(url_for("orders"))
-
-    cursor.execute("""
-        SELECT id, product_code, product_name
-        FROM products
-        ORDER BY product_name ASC
-    """)
-    products = cursor.fetchall()
-
-    conn.close()
-
-    return render_template(
-        "new_order.html",
-        products=products,
-        active_page="orders"
-    )
-
-
-@app.route("/orders/edit/<int:order_id>", methods=["GET", "POST"])
-def edit_order(order_id):
-    if not is_logged_in():
-        return redirect(url_for("login"))
+    company_id = get_company_id()
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
@@ -1235,35 +1663,112 @@ def edit_order(order_id):
         priority = request.form["priority"]
 
         cursor.execute("""
-            UPDATE orders
-            SET order_number = ?, product_id = ?, quantity = ?, status = ?, due_date = ?, priority = ?
-            WHERE id = ?
-        """, (order_number, product_id, quantity, status, due_date, priority, order_id))
+            INSERT INTO orders (
+                order_number,
+                product_id,
+                quantity,
+                status,
+                due_date,
+                priority,
+                company_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            order_number,
+            product_id,
+            quantity,
+            status,
+            due_date,
+            priority,
+            company_id
+        ))
 
-        try:
-            rebuild_order_jobs(cursor, order_id, int(product_id), quantity, due_date)
-        except ValueError as e:
-            conn.rollback()
-            conn.close()
-            flash(str(e), "error")
-            return redirect(url_for("edit_order", order_id=order_id))
+        order_id = cursor.lastrowid
+
+        # GENERATE JOBS (labai svarbu!)
+        generate_order_jobs_recursive(
+            cursor,
+            order_id,
+            int(product_id),
+            quantity,
+            planned_date=None,
+            company_id=company_id
+        )
 
         conn.commit()
         conn.close()
 
-        flash("Order updated successfully.", "success")
         return redirect(url_for("orders"))
+
+    # Tik tos kompanijos produktai
+    cursor.execute("""
+        SELECT id, product_code, product_name
+        FROM products
+        WHERE company_id = ?
+    """, (company_id,))
+    products = cursor.fetchall()
+
+    conn.close()
+
+    return render_template("new_order.html", products=products)
+
+
+@app.route("/orders/edit/<int:order_id>", methods=["GET", "POST"])
+def edit_order(order_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, order_number, product_id, quantity, status, due_date, priority
         FROM orders
-        WHERE id = ?
-    """, (order_id,))
+        WHERE id = ? AND company_id = ?
+    """, (order_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
         conn.close()
         return "Order not found", 404
+
+    if request.method == "POST":
+        order_number = request.form["order_number"].strip()
+        product_id = int(request.form["product_id"])
+        quantity = float(request.form["quantity"])
+        status = request.form["status"].strip()
+        due_date = request.form["due_date"].strip()
+        priority = request.form["priority"].strip()
+
+        try:
+            require_company_record(cursor, "products", product_id, company_id, "Product not found.")
+
+            cursor.execute("""
+                UPDATE orders
+                SET order_number = ?, product_id = ?, quantity = ?, status = ?, due_date = ?, priority = ?
+                WHERE id = ? AND company_id = ?
+            """, (order_number, product_id, quantity, status, due_date, priority, order_id, company_id))
+
+            rebuild_order_jobs(
+                cursor,
+                order_id,
+                int(product_id),
+                quantity,
+                due_date,
+                company_id=company_id
+            )
+
+            conn.commit()
+            conn.close()
+
+            flash("Order updated successfully.", "success")
+            return redirect(url_for("orders"))
+        except ValueError as e:
+            conn.rollback()
+            conn.close()
+            flash(str(e), "error")
+            return redirect(url_for("edit_order", order_id=order_id))
 
     order = {
         "id": row[0],
@@ -1278,8 +1783,9 @@ def edit_order(order_id):
     cursor.execute("""
         SELECT id, product_code, product_name
         FROM products
+        WHERE company_id = ?
         ORDER BY product_name ASC
-    """)
+    """, (company_id,))
     products = cursor.fetchall()
 
     conn.close()
@@ -1297,95 +1803,70 @@ def order_materials(order_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT
-            orders.id,
-            orders.order_number,
-            orders.product_id,
-            orders.quantity,
-            products.product_name
-        FROM orders
-        LEFT JOIN products ON orders.product_id = products.id
-        WHERE orders.id = ?
-    """, (order_id,))
-    order_row = cursor.fetchone()
+            o.id,
+            o.order_number,
+            o.quantity,
+            p.id,
+            p.product_name
+        FROM orders o
+        JOIN products p ON o.product_id = p.id
+        WHERE o.id = ? AND o.company_id = ?
+    """, (order_id, company_id))
 
-    if order_row is None:
+    order = cursor.fetchone()
+
+    if not order:
         conn.close()
-        return "Order not found", 404
-
-    order = {
-        "id": order_row[0],
-        "order_number": order_row[1],
-        "product_id": order_row[2],
-        "quantity": order_row[3] if order_row[3] is not None else 1,
-        "product_name": order_row[4] if order_row[4] else "-"
-    }
-
-    if order["product_id"] is None:
-        conn.close()
-        flash("Order has no product assigned.", "error")
         return redirect(url_for("orders"))
 
-    try:
-        exploded_items = explode_bom_items_recursive(
-            cursor,
-            order["product_id"],
-            float(order["quantity"])
-        )
-    except ValueError as e:
-        conn.close()
-        flash(str(e), "error")
-        return redirect(url_for("orders"))
+    product_id = order[3]
+    quantity = order[2]
+
+    exploded = explode_bom_items_recursive(
+        cursor,
+        product_id,
+        quantity,
+        company_id=company_id
+    )
 
     materials = []
-    total_material_cost = 0
 
-    if exploded_items:
-        item_ids = list(exploded_items.keys())
-        placeholders = ",".join(["?"] * len(item_ids))
-
-        cursor.execute(f"""
-            SELECT
-                id,
-                item_code,
-                item_name,
-                measurement_unit,
-                unit_price
+    for item_id, total_qty in exploded.items():
+        cursor.execute("""
+            SELECT item_name, item_code, measurement_unit, unit_price
             FROM items
-            WHERE id IN ({placeholders})
-            ORDER BY item_name ASC
-        """, item_ids)
-        item_rows = cursor.fetchall()
+            WHERE id = ? AND company_id = ?
+        """, (item_id, company_id))
 
-        for row in item_rows:
-            item_id = row[0]
-            total_quantity = exploded_items.get(item_id, 0)
-            unit_price = row[4] if row[4] is not None else 0
-            total_cost = total_quantity * unit_price
-            total_material_cost += total_cost
+        item = cursor.fetchone()
 
+        if item:
             materials.append({
-                "item_code": row[1],
-                "item_name": row[2],
-                "unit": row[3],
-                "bom_quantity": total_quantity / float(order["quantity"]) if float(order["quantity"]) > 0 else 0,
-                "total_quantity": total_quantity,
-                "unit_price": unit_price,
-                "total_cost": total_cost
+                "item_name": item[0],
+                "item_code": item[1],
+                "unit": item[2],
+                "total_quantity": total_qty,
+                "unit_price": item[3],
+                "total_cost": total_qty * item[3]
             })
 
     conn.close()
 
     return render_template(
         "order_materials.html",
-        order=order,
-        materials=materials,
-        total_material_cost=total_material_cost,
-        active_page="orders"
+        order={
+            "order_number": order[1],
+            "quantity": quantity,
+            "product_name": order[4]
+        },
+        materials=materials
     )
 
 @app.route("/orders/delete/<int:order_id>", methods=["POST"])
@@ -1393,23 +1874,27 @@ def delete_order(order_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
+    # security check
+    require_company_record(cursor, "orders", order_id, company_id)
+
     cursor.execute("""
         DELETE FROM order_jobs
-        WHERE order_id = ?
-    """, (order_id,))
+        WHERE order_id = ? AND company_id = ?
+    """, (order_id, company_id))
 
     cursor.execute("""
         DELETE FROM orders
-        WHERE id = ?
-    """, (order_id,))
+        WHERE id = ? AND company_id = ?
+    """, (order_id, company_id))
 
     conn.commit()
     conn.close()
 
-    flash("Order deleted successfully.", "success")
     return redirect(url_for("orders"))
 
 
@@ -1418,6 +1903,7 @@ def items():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     item_code = request.args.get("item_code", "").strip()
     item_name = request.args.get("item_name", "").strip()
 
@@ -1425,23 +1911,27 @@ def items():
     cursor = conn.cursor()
 
     query = """
-        SELECT id, item_code, item_name, description, measurement_unit, unit_price, stock_quantity, min_stock
+        SELECT
+            id,
+            item_code,
+            item_name,
+            description,
+            measurement_unit,
+            unit_price,
+            stock_quantity,
+            min_stock
         FROM items
+        WHERE company_id = ?
     """
-
-    conditions = []
-    params = []
+    params = [company_id]
 
     if item_code:
-        conditions.append("item_code LIKE ?")
+        query += " AND item_code LIKE ?"
         params.append(f"%{item_code}%")
 
     if item_name:
-        conditions.append("item_name LIKE ?")
+        query += " AND item_name LIKE ?"
         params.append(f"%{item_name}%")
-
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
 
     query += " ORDER BY id DESC"
 
@@ -1480,24 +1970,65 @@ def new_item():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
     if request.method == "POST":
-        item_code = request.form["item_code"]
-        item_name = request.form["item_name"]
-        description = request.form["description"]
-        measurement_unit = request.form["measurement_unit"]
+        item_code = request.form["item_code"].strip()
+        item_name = request.form["item_name"].strip()
+        description = request.form["description"].strip()
+        measurement_unit = request.form["measurement_unit"].strip()
         unit_price = float(request.form["unit_price"] or 0)
         stock_quantity = float(request.form["stock_quantity"] or 0)
         min_stock = float(request.form["min_stock"] or 0)
+        supplier_id_raw = request.form.get("supplier_id", "").strip()
 
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
+        supplier_id = None
+        if supplier_id_raw:
+            try:
+                supplier_id = int(supplier_id_raw)
+            except ValueError:
+                conn.close()
+                flash("Invalid supplier selected.", "error")
+                return redirect(url_for("new_item"))
+
+            cursor.execute("""
+                SELECT id
+                FROM suppliers
+                WHERE id = ? AND company_id = ?
+            """, (supplier_id, company_id))
+            supplier_row = cursor.fetchone()
+
+            if supplier_row is None:
+                conn.close()
+                flash("Selected supplier not found.", "error")
+                return redirect(url_for("new_item"))
 
         cursor.execute("""
             INSERT INTO items (
-                item_code, item_name, description, measurement_unit, unit_price, stock_quantity, min_stock
+                item_code,
+                item_name,
+                description,
+                measurement_unit,
+                unit_price,
+                stock_quantity,
+                min_stock,
+                supplier_id,
+                company_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (item_code, item_name, description, measurement_unit, unit_price, stock_quantity, min_stock))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            item_code,
+            item_name,
+            description,
+            measurement_unit,
+            unit_price,
+            stock_quantity,
+            min_stock,
+            supplier_id,
+            company_id
+        ))
 
         conn.commit()
         conn.close()
@@ -1505,8 +2036,19 @@ def new_item():
         flash("Item created successfully.", "success")
         return redirect(url_for("items"))
 
+    cursor.execute("""
+        SELECT id, name
+        FROM suppliers
+        WHERE company_id = ? AND is_active = 1
+        ORDER BY name ASC
+    """, (company_id,))
+    suppliers = cursor.fetchall()
+
+    conn.close()
+
     return render_template(
         "new_item.html",
+        suppliers=suppliers,
         active_page="items"
     )
 
@@ -1516,57 +2058,115 @@ def edit_item(item_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    if request.method == "POST":
-        item_code = request.form["item_code"]
-        item_name = request.form["item_name"]
-        description = request.form["description"]
-        measurement_unit = request.form["measurement_unit"]
-        unit_price = float(request.form["unit_price"] or 0)
-        stock_quantity = float(request.form["stock_quantity"] or 0)
-        min_stock = float(request.form["min_stock"] or 0)
+    try:
+        require_company_record(cursor, "items", item_id, company_id, "Item not found.")
+
+        if request.method == "POST":
+            item_code = request.form["item_code"].strip()
+            item_name = request.form["item_name"].strip()
+            description = request.form["description"].strip()
+            measurement_unit = request.form["measurement_unit"].strip()
+            unit_price = float(request.form["unit_price"] or 0)
+            stock_quantity = float(request.form["stock_quantity"] or 0)
+            min_stock = float(request.form["min_stock"] or 0)
+            supplier_id_raw = request.form.get("supplier_id", "").strip()
+
+            supplier_id = None
+            if supplier_id_raw:
+                try:
+                    supplier_id = int(supplier_id_raw)
+                except ValueError:
+                    conn.close()
+                    flash("Invalid supplier selected.", "error")
+                    return redirect(url_for("edit_item", item_id=item_id))
+
+                cursor.execute("""
+                    SELECT id
+                    FROM suppliers
+                    WHERE id = ? AND company_id = ?
+                """, (supplier_id, company_id))
+                supplier_row = cursor.fetchone()
+
+                if supplier_row is None:
+                    conn.close()
+                    flash("Selected supplier not found.", "error")
+                    return redirect(url_for("edit_item", item_id=item_id))
+
+            cursor.execute("""
+                UPDATE items
+                SET item_code = ?, item_name = ?, description = ?, measurement_unit = ?,
+                    unit_price = ?, stock_quantity = ?, min_stock = ?, supplier_id = ?
+                WHERE id = ? AND company_id = ?
+            """, (
+                item_code,
+                item_name,
+                description,
+                measurement_unit,
+                unit_price,
+                stock_quantity,
+                min_stock,
+                supplier_id,
+                item_id,
+                company_id
+            ))
+
+            conn.commit()
+            conn.close()
+
+            flash("Item updated successfully.", "success")
+            return redirect(url_for("items"))
 
         cursor.execute("""
-            UPDATE items
-            SET item_code = ?, item_name = ?, description = ?, measurement_unit = ?, unit_price = ?, stock_quantity = ?, min_stock = ?
-            WHERE id = ?
-        """, (item_code, item_name, description, measurement_unit, unit_price, stock_quantity, min_stock, item_id))
+            SELECT
+                id,
+                item_code,
+                item_name,
+                description,
+                measurement_unit,
+                unit_price,
+                stock_quantity,
+                min_stock,
+                supplier_id
+            FROM items
+            WHERE id = ? AND company_id = ?
+        """, (item_id, company_id))
+        row = cursor.fetchone()
 
-        conn.commit()
+        cursor.execute("""
+            SELECT id, name
+            FROM suppliers
+            WHERE company_id = ? AND is_active = 1
+            ORDER BY name ASC
+        """, (company_id,))
+        supplier_rows = cursor.fetchall()
+
         conn.close()
 
-        flash("Item updated successfully.", "success")
-        return redirect(url_for("items"))
+        item = {
+            "id": row[0],
+            "item_code": row[1],
+            "item_name": row[2],
+            "description": row[3],
+            "measurement_unit": row[4],
+            "unit_price": row[5] if row[5] is not None else 0,
+            "stock_quantity": row[6] if row[6] is not None else 0,
+            "min_stock": row[7] if row[7] is not None else 0,
+            "supplier_id": row[8]
+        }
 
-    cursor.execute("""
-        SELECT id, item_code, item_name, description, measurement_unit, unit_price, stock_quantity, min_stock
-        FROM items
-        WHERE id = ?
-    """, (item_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row is None:
+        return render_template(
+            "edit_item.html",
+            item=item,
+            suppliers=supplier_rows,
+            active_page="items"
+        )
+    except ValueError:
+        conn.close()
         return "Item not found", 404
-
-    item = {
-        "id": row[0],
-        "item_code": row[1],
-        "item_name": row[2],
-        "description": row[3],
-        "measurement_unit": row[4],
-        "unit_price": row[5] if row[5] is not None else 0,
-        "stock_quantity": row[6] if row[6] is not None else 0,
-        "min_stock": row[7] if row[7] is not None else 0
-    }
-
-    return render_template(
-        "edit_item.html",
-        item=item,
-        active_page="items"
-    )
 
 
 @app.route("/items/delete/<int:item_id>", methods=["POST"])
@@ -1574,16 +2174,32 @@ def delete_item(item_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    try:
+        require_company_record(cursor, "items", item_id, company_id, "Item not found.")
 
-    conn.commit()
-    conn.close()
+        cursor.execute("""
+            DELETE FROM bom
+            WHERE item_id = ? AND company_id = ?
+        """, (item_id, company_id))
 
-    flash("Item deleted successfully.", "info")
-    return redirect(url_for("items"))
+        cursor.execute("""
+            DELETE FROM items
+            WHERE id = ? AND company_id = ?
+        """, (item_id, company_id))
+
+        conn.commit()
+        conn.close()
+
+        flash("Item deleted successfully.", "info")
+        return redirect(url_for("items"))
+    except ValueError:
+        conn.close()
+        flash("Item not found.", "error")
+        return redirect(url_for("items"))
 
 
 @app.route("/products")
@@ -1591,6 +2207,7 @@ def products():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     product_code = request.args.get("product_code", "").strip()
     product_name = request.args.get("product_name", "").strip()
 
@@ -1598,23 +2215,26 @@ def products():
     cursor = conn.cursor()
 
     query = """
-        SELECT id, product_code, product_name, description, measurement_unit, time_per_unit, stock_quantity
+        SELECT
+            id,
+            product_code,
+            product_name,
+            description,
+            measurement_unit,
+            time_per_unit,
+            stock_quantity
         FROM products
+        WHERE company_id = ?
     """
-
-    conditions = []
-    params = []
+    params = [company_id]
 
     if product_code:
-        conditions.append("product_code LIKE ?")
+        query += " AND product_code LIKE ?"
         params.append(f"%{product_code}%")
 
     if product_name:
-        conditions.append("product_name LIKE ?")
+        query += " AND product_name LIKE ?"
         params.append(f"%{product_name}%")
-
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
 
     query += " ORDER BY id DESC"
 
@@ -1630,7 +2250,7 @@ def products():
             "product_name": row[2],
             "description": row[3],
             "measurement_unit": row[4],
-            "time_per_unit": row[5],
+            "time_per_unit": row[5] if row[5] is not None else 0,
             "stock_quantity": row[6] if row[6] is not None else 0
         })
 
@@ -1652,12 +2272,14 @@ def new_product():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+
     if request.method == "POST":
-        product_code = request.form["product_code"]
-        product_name = request.form["product_name"]
-        description = request.form["description"]
-        measurement_unit = request.form["measurement_unit"]
-        time_per_unit = request.form["time_per_unit"]
+        product_code = request.form["product_code"].strip()
+        product_name = request.form["product_name"].strip()
+        description = request.form["description"].strip()
+        measurement_unit = request.form["measurement_unit"].strip()
+        time_per_unit = float(request.form["time_per_unit"] or 0)
         stock_quantity = float(request.form["stock_quantity"] or 0)
 
         conn = sqlite3.connect("database.db")
@@ -1665,10 +2287,24 @@ def new_product():
 
         cursor.execute("""
             INSERT INTO products (
-                product_code, product_name, description, measurement_unit, time_per_unit, stock_quantity
+                product_code,
+                product_name,
+                description,
+                measurement_unit,
+                time_per_unit,
+                stock_quantity,
+                company_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (product_code, product_name, description, measurement_unit, time_per_unit, stock_quantity))
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            product_code,
+            product_name,
+            description,
+            measurement_unit,
+            time_per_unit,
+            stock_quantity,
+            company_id
+        ))
 
         conn.commit()
         conn.close()
@@ -1687,55 +2323,75 @@ def edit_product(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    if request.method == "POST":
-        product_code = request.form["product_code"]
-        product_name = request.form["product_name"]
-        description = request.form["description"]
-        measurement_unit = request.form["measurement_unit"]
-        time_per_unit = request.form["time_per_unit"]
-        stock_quantity = float(request.form["stock_quantity"] or 0)
+    try:
+        require_company_record(cursor, "products", product_id, company_id, "Product not found.")
+
+        if request.method == "POST":
+            product_code = request.form["product_code"].strip()
+            product_name = request.form["product_name"].strip()
+            description = request.form["description"].strip()
+            measurement_unit = request.form["measurement_unit"].strip()
+            time_per_unit = float(request.form["time_per_unit"] or 0)
+            stock_quantity = float(request.form["stock_quantity"] or 0)
+
+            cursor.execute("""
+                UPDATE products
+                SET product_code = ?, product_name = ?, description = ?, measurement_unit = ?, time_per_unit = ?, stock_quantity = ?
+                WHERE id = ? AND company_id = ?
+            """, (
+                product_code,
+                product_name,
+                description,
+                measurement_unit,
+                time_per_unit,
+                stock_quantity,
+                product_id,
+                company_id
+            ))
+
+            conn.commit()
+            conn.close()
+
+            flash("Product updated successfully.", "success")
+            return redirect(url_for("products"))
 
         cursor.execute("""
-            UPDATE products
-            SET product_code = ?, product_name = ?, description = ?, measurement_unit = ?, time_per_unit = ?, stock_quantity = ?
-            WHERE id = ?
-        """, (product_code, product_name, description, measurement_unit, time_per_unit, stock_quantity, product_id))
-
-        conn.commit()
+            SELECT
+                id,
+                product_code,
+                product_name,
+                description,
+                measurement_unit,
+                time_per_unit,
+                stock_quantity
+            FROM products
+            WHERE id = ? AND company_id = ?
+        """, (product_id, company_id))
+        row = cursor.fetchone()
         conn.close()
 
-        flash("Product updated successfully.", "success")
-        return redirect(url_for("products"))
+        product = {
+            "id": row[0],
+            "product_code": row[1],
+            "product_name": row[2],
+            "description": row[3],
+            "measurement_unit": row[4],
+            "time_per_unit": row[5] if row[5] is not None else 0,
+            "stock_quantity": row[6] if row[6] is not None else 0
+        }
 
-    cursor.execute("""
-        SELECT id, product_code, product_name, description, measurement_unit, time_per_unit, stock_quantity
-        FROM products
-        WHERE id = ?
-    """, (product_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row is None:
+        return render_template(
+            "edit_product.html",
+            product=product,
+            active_page="products"
+        )
+    except ValueError:
+        conn.close()
         return "Product not found", 404
-
-    product = {
-        "id": row[0],
-        "product_code": row[1],
-        "product_name": row[2],
-        "description": row[3],
-        "measurement_unit": row[4],
-        "time_per_unit": row[5],
-        "stock_quantity": row[6] if row[6] is not None else 0
-    }
-
-    return render_template(
-        "edit_product.html",
-        product=product,
-        active_page="products"
-    )
 
 
 @app.route("/products/delete/<int:product_id>", methods=["POST"])
@@ -1743,30 +2399,57 @@ def delete_product(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    try:
+        require_company_record(cursor, "products", product_id, company_id, "Product not found.")
 
-    conn.commit()
-    conn.close()
+        cursor.execute("""
+            DELETE FROM bom
+            WHERE product_id = ? AND company_id = ?
+        """, (product_id, company_id))
 
-    flash("Product deleted successfully.", "info")
-    return redirect(url_for("products"))
+        cursor.execute("""
+            DELETE FROM bom
+            WHERE child_product_id = ? AND company_id = ?
+        """, (product_id, company_id))
+
+        cursor.execute("""
+            DELETE FROM product_job_templates
+            WHERE product_id = ? AND company_id = ?
+        """, (product_id, company_id))
+
+        cursor.execute("""
+            DELETE FROM products
+            WHERE id = ? AND company_id = ?
+        """, (product_id, company_id))
+
+        conn.commit()
+        conn.close()
+
+        flash("Product deleted successfully.", "info")
+        return redirect(url_for("products"))
+    except ValueError:
+        conn.close()
+        flash("Product not found.", "error")
+        return redirect(url_for("products"))
 
 @app.route("/products/<int:product_id>/jobs")
 def product_jobs(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, product_code, product_name, description, measurement_unit, time_per_unit
         FROM products
-        WHERE id = ?
-    """, (product_id,))
+        WHERE id = ? AND company_id = ?
+    """, (product_id, company_id))
     product_row = cursor.fetchone()
 
     if product_row is None:
@@ -1791,10 +2474,13 @@ def product_jobs(product_id):
             pjt.workstation_id,
             w.name
         FROM product_job_templates pjt
-        JOIN workstations w ON pjt.workstation_id = w.id
+        JOIN workstations w
+          ON pjt.workstation_id = w.id
+         AND w.company_id = pjt.company_id
         WHERE pjt.product_id = ?
+          AND pjt.company_id = ?
         ORDER BY pjt.sequence ASC, pjt.id ASC
-    """, (product_id,))
+    """, (product_id, company_id))
     rows = cursor.fetchall()
 
     job_templates = []
@@ -1811,16 +2497,12 @@ def product_jobs(product_id):
     cursor.execute("""
         SELECT id, name
         FROM workstations
+        WHERE company_id = ?
         ORDER BY name ASC
-    """)
+    """, (company_id,))
     workstation_rows = cursor.fetchall()
 
-    workstations = []
-    for row in workstation_rows:
-        workstations.append({
-            "id": row[0],
-            "name": row[1]
-        })
+    workstations = [{"id": row[0], "name": row[1]} for row in workstation_rows]
 
     conn.close()
 
@@ -1838,26 +2520,40 @@ def add_product_job(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    job_name = request.form["job_name"]
-    workstation_id = request.form["workstation_id"]
-    sequence = request.form["sequence"]
-    estimated_hours = request.form["estimated_hours"]
+    company_id = get_company_id()
+    job_name = request.form["job_name"].strip()
+    workstation_id = int(request.form["workstation_id"])
+    sequence = int(request.form["sequence"])
+    estimated_hours = float(request.form["estimated_hours"] or 0)
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("""
-        INSERT INTO product_job_templates (
-            product_id, workstation_id, job_name, sequence, estimated_hours
-        )
-        VALUES (?, ?, ?, ?, ?)
-    """, (product_id, workstation_id, job_name, sequence, estimated_hours))
+    try:
+        require_company_record(cursor, "products", product_id, company_id, "Product not found.")
+        require_company_record(cursor, "workstations", workstation_id, company_id, "Workstation not found.")
 
-    conn.commit()
-    conn.close()
+        cursor.execute("""
+            INSERT INTO product_job_templates (
+                product_id,
+                workstation_id,
+                job_name,
+                sequence,
+                estimated_hours,
+                company_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (product_id, workstation_id, job_name, sequence, estimated_hours, company_id))
 
-    flash("Product job template added successfully.", "success")
-    return redirect(url_for("product_jobs", product_id=product_id))
+        conn.commit()
+        conn.close()
+
+        flash("Product job template added successfully.", "success")
+        return redirect(url_for("product_jobs", product_id=product_id))
+    except ValueError as e:
+        conn.close()
+        flash(str(e), "error")
+        return redirect(url_for("product_jobs", product_id=product_id))
 
 
 @app.route("/products/jobs/edit/<int:job_id>", methods=["GET", "POST"])
@@ -1865,44 +2561,46 @@ def edit_product_job(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
-
-    if request.method == "POST":
-        job_name = request.form["job_name"]
-        workstation_id = request.form["workstation_id"]
-        sequence = request.form["sequence"]
-        estimated_hours = request.form["estimated_hours"]
-
-        cursor.execute("""
-            UPDATE product_job_templates
-            SET job_name = ?, workstation_id = ?, sequence = ?, estimated_hours = ?
-            WHERE id = ?
-        """, (job_name, workstation_id, sequence, estimated_hours, job_id))
-
-        cursor.execute("""
-            SELECT product_id
-            FROM product_job_templates
-            WHERE id = ?
-        """, (job_id,))
-        row = cursor.fetchone()
-
-        conn.commit()
-        conn.close()
-
-        flash("Product job template updated successfully.", "success")
-        return redirect(url_for("product_jobs", product_id=row[0]))
 
     cursor.execute("""
         SELECT id, product_id, workstation_id, job_name, sequence, estimated_hours
         FROM product_job_templates
-        WHERE id = ?
-    """, (job_id,))
+        WHERE id = ? AND company_id = ?
+    """, (job_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
         conn.close()
         return "Product job template not found", 404
+
+    if request.method == "POST":
+        job_name = request.form["job_name"].strip()
+        workstation_id = int(request.form["workstation_id"])
+        sequence = int(request.form["sequence"])
+        estimated_hours = float(request.form["estimated_hours"] or 0)
+
+        try:
+            require_company_record(cursor, "workstations", workstation_id, company_id, "Workstation not found.")
+
+            cursor.execute("""
+                UPDATE product_job_templates
+                SET job_name = ?, workstation_id = ?, sequence = ?, estimated_hours = ?
+                WHERE id = ? AND company_id = ?
+            """, (job_name, workstation_id, sequence, estimated_hours, job_id, company_id))
+
+            conn.commit()
+            product_id = row[1]
+            conn.close()
+
+            flash("Product job template updated successfully.", "success")
+            return redirect(url_for("product_jobs", product_id=product_id))
+        except ValueError as e:
+            conn.close()
+            flash(str(e), "error")
+            return redirect(url_for("product_jobs", product_id=row[1]))
 
     job_template = {
         "id": row[0],
@@ -1916,31 +2614,25 @@ def edit_product_job(job_id):
     cursor.execute("""
         SELECT id, name
         FROM workstations
+        WHERE company_id = ?
         ORDER BY name ASC
-    """)
+    """, (company_id,))
     workstation_rows = cursor.fetchall()
-
-    workstations = []
-    for workstation_row in workstation_rows:
-        workstations.append({
-            "id": workstation_row[0],
-            "name": workstation_row[1]
-        })
+    workstations = [{"id": r[0], "name": r[1]} for r in workstation_rows]
 
     cursor.execute("""
         SELECT id, product_code, product_name
         FROM products
-        WHERE id = ?
-    """, (job_template["product_id"],))
+        WHERE id = ? AND company_id = ?
+    """, (job_template["product_id"], company_id))
     product_row = cursor.fetchone()
+    conn.close()
 
     product = {
         "id": product_row[0],
         "product_code": product_row[1],
         "product_name": product_row[2]
     }
-
-    conn.close()
 
     return render_template(
         "edit_product_job.html",
@@ -1956,14 +2648,15 @@ def delete_product_job(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT product_id
         FROM product_job_templates
-        WHERE id = ?
-    """, (job_id,))
+        WHERE id = ? AND company_id = ?
+    """, (job_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
@@ -1973,7 +2666,10 @@ def delete_product_job(job_id):
 
     product_id = row[0]
 
-    cursor.execute("DELETE FROM product_job_templates WHERE id = ?", (job_id,))
+    cursor.execute("""
+        DELETE FROM product_job_templates
+        WHERE id = ? AND company_id = ?
+    """, (job_id, company_id))
 
     conn.commit()
     conn.close()
@@ -1987,14 +2683,15 @@ def product_bom(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, product_code, product_name, description, measurement_unit, time_per_unit
         FROM products
-        WHERE id = ?
-    """, (product_id,))
+        WHERE id = ? AND company_id = ?
+    """, (product_id, company_id))
     product_row = cursor.fetchone()
 
     if product_row is None:
@@ -2022,18 +2719,23 @@ def product_bom(product_id):
             products.product_name,
             products.measurement_unit
         FROM bom
-        LEFT JOIN items ON bom.item_id = items.id AND bom.component_type = 'item'
-        LEFT JOIN products ON bom.child_product_id = products.id AND bom.component_type = 'product'
+        LEFT JOIN items
+          ON bom.item_id = items.id
+         AND bom.component_type = 'item'
+         AND items.company_id = bom.company_id
+        LEFT JOIN products
+          ON bom.child_product_id = products.id
+         AND bom.component_type = 'product'
+         AND products.company_id = bom.company_id
         WHERE bom.product_id = ?
+          AND bom.company_id = ?
         ORDER BY bom.id DESC
-    """, (product_id,))
+    """, (product_id, company_id))
     bom_rows = cursor.fetchall()
 
     bom_items = []
     for row in bom_rows:
-        component_type = row[1]
-
-        if component_type == "product":
+        if row[1] == "product":
             bom_items.append({
                 "id": row[0],
                 "component_type": "product",
@@ -2055,35 +2757,21 @@ def product_bom(product_id):
     cursor.execute("""
         SELECT id, item_code, item_name, measurement_unit
         FROM items
+        WHERE company_id = ?
         ORDER BY item_name ASC
-    """)
+    """, (company_id,))
     item_rows = cursor.fetchall()
-
-    items = []
-    for row in item_rows:
-        items.append({
-            "id": row[0],
-            "item_code": row[1],
-            "item_name": row[2],
-            "measurement_unit": row[3]
-        })
+    items = [{"id": r[0], "item_code": r[1], "item_name": r[2], "measurement_unit": r[3]} for r in item_rows]
 
     cursor.execute("""
         SELECT id, product_code, product_name, measurement_unit
         FROM products
         WHERE id != ?
+          AND company_id = ?
         ORDER BY product_name ASC
-    """, (product_id,))
+    """, (product_id, company_id))
     product_rows = cursor.fetchall()
-
-    child_products = []
-    for row in product_rows:
-        child_products.append({
-            "id": row[0],
-            "product_code": row[1],
-            "product_name": row[2],
-            "measurement_unit": row[3]
-        })
+    child_products = [{"id": r[0], "product_code": r[1], "product_name": r[2], "measurement_unit": r[3]} for r in product_rows]
 
     conn.close()
 
@@ -2093,7 +2781,7 @@ def product_bom(product_id):
         bom_items=bom_items,
         items=items,
         child_products=child_products,
-        active_page="bom"
+        active_page="products"
     )
 
 
@@ -2102,14 +2790,15 @@ def product_cost(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, product_code, product_name, measurement_unit
         FROM products
-        WHERE id = ?
-    """, (product_id,))
+        WHERE id = ? AND company_id = ?
+    """, (product_id, company_id))
     product_row = cursor.fetchone()
 
     if product_row is None:
@@ -2124,7 +2813,7 @@ def product_cost(product_id):
     }
 
     try:
-        exploded_items = explode_bom_items_recursive(cursor, product_id, 1)
+        exploded_items = explode_bom_items_recursive(cursor, product_id, 1, company_id=company_id)
     except ValueError as e:
         conn.close()
         flash(str(e), "error")
@@ -2138,16 +2827,12 @@ def product_cost(product_id):
         placeholders = ",".join(["?"] * len(item_ids))
 
         cursor.execute(f"""
-            SELECT
-                id,
-                item_code,
-                item_name,
-                measurement_unit,
-                unit_price
+            SELECT id, item_code, item_name, measurement_unit, unit_price
             FROM items
             WHERE id IN ({placeholders})
+              AND company_id = ?
             ORDER BY item_name ASC
-        """, item_ids)
+        """, item_ids + [company_id])
         item_rows = cursor.fetchall()
 
         for row in item_rows:
@@ -2177,63 +2862,97 @@ def product_cost(product_id):
     )
 
 
-
 @app.route("/bom/<int:product_id>/add", methods=["POST"])
 def add_bom_item(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    component_type = request.form["component_type"]
-    quantity = request.form["quantity"]
+    company_id = get_company_id()
+    component_type = request.form.get("component_type", "item").strip()
+    quantity = float(request.form.get("quantity", 0) or 0)
+
+    item_id = request.form.get("item_id")
+    child_product_id = request.form.get("child_product_id")
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    if component_type == "product":
-        child_product_id = request.form["child_product_id"]
+    try:
+        require_company_record(cursor, "products", product_id, company_id, "Product not found.")
 
-        if str(child_product_id) == str(product_id):
-            conn.close()
-            flash("Product cannot contain itself in BOM.", "error")
-            return redirect(url_for("product_bom", product_id=product_id))
+        if component_type == "product":
+            if not child_product_id:
+                raise ValueError("Child product is required.")
+            child_product_id = int(child_product_id)
+            require_company_record(cursor, "products", child_product_id, company_id, "Child product not found.")
 
-        cursor.execute("""
-            INSERT INTO bom (product_id, item_id, child_product_id, component_type, quantity)
-            VALUES (?, ?, ?, ?, ?)
-        """, (product_id, 0, child_product_id, "product", quantity))
+            cursor.execute("""
+                INSERT INTO bom (
+                    product_id,
+                    item_id,
+                    quantity,
+                    component_type,
+                    child_product_id,
+                    company_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (product_id, 0, quantity, "product", child_product_id, company_id))
+        else:
+            if not item_id:
+                raise ValueError("Item is required.")
+            item_id = int(item_id)
+            require_company_record(cursor, "items", item_id, company_id, "Item not found.")
 
-    else:
-        item_id = request.form["item_id"]
+            cursor.execute("""
+                INSERT INTO bom (
+                    product_id,
+                    item_id,
+                    quantity,
+                    component_type,
+                    child_product_id,
+                    company_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (product_id, item_id, quantity, "item", None, company_id))
 
-        cursor.execute("""
-            INSERT INTO bom (product_id, item_id, child_product_id, component_type, quantity)
-            VALUES (?, ?, ?, ?, ?)
-        """, (product_id, item_id, None, "item", quantity))
+        conn.commit()
+        conn.close()
 
-    conn.commit()
-    conn.close()
+        flash("BOM item added successfully.", "success")
+        return redirect(url_for("product_bom", product_id=product_id))
+    except ValueError as e:
+        conn.close()
+        flash(str(e), "error")
+        return redirect(url_for("product_bom", product_id=product_id))
 
-    flash("BOM component added successfully.", "success")
-    return redirect(url_for("product_bom", product_id=product_id))
+
 @app.route("/bom/delete/<int:bom_id>", methods=["POST"])
 def delete_bom_item(bom_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT product_id FROM bom WHERE id = ?", (bom_id,))
+    cursor.execute("""
+        SELECT product_id
+        FROM bom
+        WHERE id = ? AND company_id = ?
+    """, (bom_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
         conn.close()
-        flash("BOM item not found.", "error")
+        flash("BOM row not found.", "error")
         return redirect(url_for("products"))
 
     product_id = row[0]
 
-    cursor.execute("DELETE FROM bom WHERE id = ?", (bom_id,))
+    cursor.execute("""
+        DELETE FROM bom
+        WHERE id = ? AND company_id = ?
+    """, (bom_id, company_id))
 
     conn.commit()
     conn.close()
@@ -2243,38 +2962,42 @@ def delete_bom_item(bom_id):
 
 
 @app.route("/workstations/new", methods=["GET", "POST"])
-
-
-
-@app.route("/workstations/new", methods=["GET", "POST"])
-
-
-@app.route("/workstations/new", methods=["GET", "POST"])
 def new_workstation():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
+
     if request.method == "POST":
-        name = request.form["name"]
-        description = request.form["description"]
-        hours_per_shift = request.form["hours_per_shift"]
-        shifts_per_day = request.form["shifts_per_day"]
-        working_days_per_month = request.form["working_days_per_month"]
-        color = request.form["color"]
+        name = request.form["name"].strip()
+        description = request.form["description"].strip()
+        hours_per_shift = float(request.form["hours_per_shift"] or 8)
+        shifts_per_day = int(request.form["shifts_per_day"] or 1)
+        working_days_per_month = int(request.form["working_days_per_month"] or 20)
+        color = request.form.get("color", "#3b82f6").strip() or "#3b82f6"
 
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
 
         cursor.execute("""
-            INSERT INTO workstations (name, description, hours_per_shift, shifts_per_day, working_days_per_month, color)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO workstations (
+                name,
+                description,
+                hours_per_shift,
+                shifts_per_day,
+                working_days_per_month,
+                color,
+                company_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             description,
             hours_per_shift,
             shifts_per_day,
             working_days_per_month,
-            color
+            color,
+            company_id
         ))
 
         conn.commit()
@@ -2294,22 +3017,50 @@ def edit_workstation(workstation_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
+    cursor.execute("""
+        SELECT
+            id,
+            name,
+            description,
+            hours_per_shift,
+            shifts_per_day,
+            working_days_per_month,
+            color
+        FROM workstations
+        WHERE id = ? AND company_id = ?
+    """, (workstation_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        return "Workstation not found", 404
+
     if request.method == "POST":
-        name = request.form["name"]
-        description = request.form["description"]
-        hours_per_shift = request.form["hours_per_shift"]
-        shifts_per_day = request.form["shifts_per_day"]
-        working_days_per_month = request.form["working_days_per_month"]
-        color = request.form["color"]
+        name = request.form["name"].strip()
+        description = request.form["description"].strip()
+        hours_per_shift = float(request.form["hours_per_shift"] or 8)
+        shifts_per_day = int(request.form["shifts_per_day"] or 1)
+        working_days_per_month = int(request.form["working_days_per_month"] or 20)
+        color = request.form.get("color", "#3b82f6").strip() or "#3b82f6"
 
         cursor.execute("""
             UPDATE workstations
             SET name = ?, description = ?, hours_per_shift = ?, shifts_per_day = ?, working_days_per_month = ?, color = ?
-            WHERE id = ?
-        """, (name, description, hours_per_shift, shifts_per_day, working_days_per_month, color, workstation_id))
+            WHERE id = ? AND company_id = ?
+        """, (
+            name,
+            description,
+            hours_per_shift,
+            shifts_per_day,
+            working_days_per_month,
+            color,
+            workstation_id,
+            company_id
+        ))
 
         conn.commit()
         conn.close()
@@ -2317,16 +3068,7 @@ def edit_workstation(workstation_id):
         flash("Workstation updated successfully.", "success")
         return redirect(url_for("workstations"))
 
-    cursor.execute("""
-        SELECT id, name, description, hours_per_shift, shifts_per_day, working_days_per_month, color
-        FROM workstations
-        WHERE id = ?
-    """, (workstation_id,))
-    row = cursor.fetchone()
     conn.close()
-
-    if row is None:
-        return "Workstation not found", 404
 
     workstation = {
         "id": row[0],
@@ -2350,10 +3092,33 @@ def delete_workstation(workstation_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM workstations WHERE id = ?", (workstation_id,))
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM product_job_templates
+        WHERE workstation_id = ? AND company_id = ?
+    """, (workstation_id, company_id))
+    template_count = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM order_jobs
+        WHERE workstation_id = ? AND company_id = ?
+    """, (workstation_id, company_id))
+    job_count = cursor.fetchone()[0]
+
+    if template_count > 0 or job_count > 0:
+        conn.close()
+        flash("Cannot delete workstation that is used in jobs or templates.", "error")
+        return redirect(url_for("workstations"))
+
+    cursor.execute("""
+        DELETE FROM workstations
+        WHERE id = ? AND company_id = ?
+    """, (workstation_id, company_id))
 
     conn.commit()
     conn.close()
@@ -2364,9 +3129,12 @@ def delete_workstation(workstation_id):
 
 
 @app.route("/jobs")
+@permission_required("view_jobs")
 def jobs():
     if not is_logged_in():
         return redirect(url_for("login"))
+
+    company_id = get_company_id()
 
     order_number = request.args.get("order_number", "").strip()
     product_name = request.args.get("product_name", "").strip()
@@ -2409,59 +3177,56 @@ def jobs():
                 FROM order_jobs child
                 WHERE child.parent_job_id = oj.id
                   AND child.is_split_child = 1
+                  AND child.company_id = oj.company_id
             ) AS child_count
         FROM order_jobs oj
-        JOIN orders o ON oj.order_id = o.id
-        LEFT JOIN products jp ON oj.job_product_id = jp.id
-        JOIN workstations w ON oj.workstation_id = w.id
+        JOIN orders o
+          ON oj.order_id = o.id
+         AND o.company_id = oj.company_id
+        LEFT JOIN products jp
+          ON oj.job_product_id = jp.id
+         AND jp.company_id = oj.company_id
+        JOIN workstations w
+          ON oj.workstation_id = w.id
+         AND w.company_id = oj.company_id
+        WHERE oj.company_id = ?
     """
-
-    conditions = []
-    params = []
+    params = [company_id]
 
     if order_number:
-        conditions.append("o.order_number LIKE ?")
+        query += " AND o.order_number LIKE ?"
         params.append(f"%{order_number}%")
 
     if product_name:
-        conditions.append("jp.product_name LIKE ?")
+        query += " AND jp.product_name LIKE ?"
         params.append(f"%{product_name}%")
 
     if job_name:
-        conditions.append("oj.job_name LIKE ?")
+        query += " AND oj.job_name LIKE ?"
         params.append(f"%{job_name}%")
 
     if workstation:
-        conditions.append("CAST(oj.workstation_id AS TEXT) = ?")
+        query += " AND oj.workstation_id = ?"
         params.append(workstation)
 
     if workstation_text:
-        conditions.append("w.name LIKE ?")
+        query += " AND w.name LIKE ?"
         params.append(f"%{workstation_text}%")
 
     if statuses:
-        placeholders = ",".join("?" for _ in statuses)
-        conditions.append(f"oj.status IN ({placeholders})")
+        placeholders = ",".join(["?"] * len(statuses))
+        query += f" AND oj.status IN ({placeholders})"
         params.extend(statuses)
 
     if due_date_from:
-        conditions.append("o.due_date >= ?")
+        query += " AND o.due_date >= ?"
         params.append(due_date_from)
 
     if due_date_to:
-        conditions.append("o.due_date <= ?")
+        query += " AND o.due_date <= ?"
         params.append(due_date_to)
 
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-
-    query += """
-        ORDER BY
-            o.id DESC,
-            CASE WHEN oj.parent_job_id IS NULL THEN oj.id ELSE oj.parent_job_id END ASC,
-            oj.is_split_child ASC,
-            oj.id ASC
-    """
+    query += " ORDER BY o.due_date ASC, o.order_number ASC, oj.sequence ASC, oj.id ASC"
 
     cursor.execute(query, params)
     rows = cursor.fetchall()
@@ -2469,44 +3234,46 @@ def jobs():
     jobs = []
     for row in rows:
         job_id = row[0]
+        planned_quantity = float(row[7] or 0)
+        completed_quantity = float(row[8] or 0)
         child_count = int(row[16] or 0)
 
+        progress_percent = 0
+        if planned_quantity > 0:
+            progress_percent = min(100, max(0, (completed_quantity / planned_quantity) * 100))
+
         jobs.append({
-            "id": job_id,
+            "id": row[0],
             "order_number": row[1],
             "product_name": row[2] if row[2] else "-",
             "job_name": row[3],
-            "workstation": row[4],
+            "workstation_name": row[4],
             "workstation_id": row[5],
             "sequence": row[6],
-            "planned_quantity": row[7],
-            "completed_quantity": row[8],
+            "planned_quantity": planned_quantity,
+            "completed_quantity": completed_quantity,
             "estimated_hours": row[9],
             "status": row[10],
             "due_date": row[11],
             "planned_start": row[12],
             "planned_end": row[13],
+            "progress_percent": progress_percent,
             "parent_job_id": row[14],
             "is_split_child": int(row[15] or 0),
             "child_count": child_count,
-            "can_start": can_start_job(cursor, job_id) if child_count == 0 else False
+            "can_start": can_start_job(cursor, job_id, company_id=company_id) if child_count == 0 else False
         })
 
     cursor.execute("""
         SELECT id, name
         FROM workstations
+        WHERE company_id = ?
         ORDER BY name ASC
-    """)
+    """, (company_id,))
     ws_rows = cursor.fetchall()
-
-    workstations = []
-    for w in ws_rows:
-        workstations.append({
-            "id": w[0],
-            "name": w[1]
-        })
-
     conn.close()
+
+    workstations = [{"id": w[0], "name": w[1]} for w in ws_rows]
 
     filters = {
         "order_number": order_number,
@@ -2533,32 +3300,44 @@ def update_job_workstation(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    new_workstation_id = request.form["workstation_id"]
+    company_id = get_company_id()
+    new_workstation_id = int(request.form["workstation_id"])
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE order_jobs
-        SET workstation_id = ?
-        WHERE id = ?
-    """, (new_workstation_id, job_id))
+    try:
+        require_company_record(cursor, "order_jobs", job_id, company_id, "Job not found.")
+        require_company_record(cursor, "workstations", new_workstation_id, company_id, "Workstation not found.")
 
-    recalculate_job_dates(cursor, job_id)
+        cursor.execute("""
+            UPDATE order_jobs
+            SET workstation_id = ?
+            WHERE id = ? AND company_id = ?
+        """, (new_workstation_id, job_id, company_id))
 
-    conn.commit()
-    conn.close()
+        recalculate_job_dates(cursor, job_id)
 
-    flash("Workstation updated.", "success")
-    return redirect(request.referrer or url_for("jobs"))
+        conn.commit()
+        conn.close()
 
-@app.route("/jobs/update_status/<int:job_id>/<string:new_status>", methods=["POST"])
+        flash("Workstation updated.", "success")
+        return redirect(request.referrer or url_for("jobs"))
+    except ValueError as e:
+        conn.close()
+        flash(str(e), "error")
+        return redirect(request.referrer or url_for("jobs"))
+
+
+
 @app.route("/jobs/update_status/<int:job_id>/<new_status>", methods=["POST"])
 def update_job_status(job_id, new_status):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     allowed_statuses = ["Waiting", "Ongoing", "Paused", "Done"]
+
     if new_status not in allowed_statuses:
         flash("Invalid status.", "error")
         return redirect_back("jobs")
@@ -2575,8 +3354,8 @@ def update_job_status(job_id, new_status):
             completed_quantity,
             status
         FROM order_jobs
-        WHERE id = ?
-    """, (job_id,))
+        WHERE id = ? AND company_id = ?
+    """, (job_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
@@ -2589,72 +3368,67 @@ def update_job_status(job_id, new_status):
     job_product_id = row[2]
     planned_quantity = float(row[3] or 0)
     completed_quantity = float(row[4] or 0)
-    current_status = row[5]
 
     if new_status == "Ongoing":
-        if not can_start_job(cursor, job_id):
+        if not can_start_job(cursor, job_id, company_id=company_id):
             conn.close()
             flash("Cannot start this job yet. Previous sequence jobs are not done.", "error")
             return redirect_back("jobs")
 
-        reserve_order_materials(cursor, order_id)
+        reserve_order_materials(cursor, order_id, company_id=company_id)
 
         cursor.execute("""
             UPDATE order_jobs
             SET status = ?
-            WHERE id = ?
-        """, (new_status, job_id))
+            WHERE id = ? AND company_id = ?
+        """, (new_status, job_id, company_id))
 
     elif new_status == "Done":
-        quantity_to_finish = planned_quantity - completed_quantity
-        if quantity_to_finish < 0:
-            quantity_to_finish = 0
+        if completed_quantity < planned_quantity:
+            completed_quantity = planned_quantity
+            cursor.execute("""
+                UPDATE order_jobs
+                SET completed_quantity = ?, status = ?
+                WHERE id = ? AND company_id = ?
+            """, (completed_quantity, "Done", job_id, company_id))
+        else:
+            cursor.execute("""
+                UPDATE order_jobs
+                SET status = ?
+                WHERE id = ? AND company_id = ?
+            """, ("Done", job_id, company_id))
 
-        if current_status != "Done" and quantity_to_finish > 0:
-            try:
-                # 1. nurašom medžiagas
-                consume_job_materials(cursor, job_product_id, quantity_to_finish)
+        consume_job_materials(cursor, job_product_id, planned_quantity, company_id=company_id)
 
-                # 2. tik jei tai FINAL job → pridedam produktą
-                if is_final_job(cursor, order_id, job_id):
-                    add_finished_product_stock(cursor, job_product_id, quantity_to_finish)
-
-            except ValueError as e:
-                conn.rollback()
-                conn.close()
-                flash(str(e), "error")
-                return redirect_back("jobs")
-
-        cursor.execute("""
-            UPDATE order_jobs
-            SET status = ?, completed_quantity = ?
-            WHERE id = ?
-        """, ("Done", planned_quantity, job_id))
+        if is_final_job(cursor, order_id, job_id, company_id=company_id):
+            add_finished_product_stock(cursor, job_product_id, planned_quantity, company_id=company_id)
 
     else:
         cursor.execute("""
             UPDATE order_jobs
             SET status = ?
-            WHERE id = ?
-        """, (new_status, job_id))
+            WHERE id = ? AND company_id = ?
+        """, (new_status, job_id, company_id))
 
     if parent_job_id:
-        sync_parent_job_status(cursor, parent_job_id)
+        sync_parent_job_status(cursor, parent_job_id, company_id=company_id)
 
-    sync_order_status(cursor, order_id)
+    sync_order_status(cursor, order_id, company_id=company_id)
 
     conn.commit()
     conn.close()
 
     flash("Job status updated.", "success")
-    return redirect(request.referrer or url_for("jobs"))
+    return redirect_back("jobs")
 
 
 @app.route("/jobs/update_progress/<int:job_id>", methods=["POST"])
+@permission_required("update_job_progress")
 def update_job_progress(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     completed_quantity = float(request.form.get("completed_quantity", 0) or 0)
 
     conn = sqlite3.connect("database.db")
@@ -2664,7 +3438,8 @@ def update_job_progress(job_id):
         SELECT planned_quantity, parent_job_id, order_id
         FROM order_jobs
         WHERE id = ?
-    """, (job_id,))
+          AND company_id = ?
+    """, (job_id, company_id))
     row = cursor.fetchone()
 
     if row is None:
@@ -2693,14 +3468,15 @@ def update_job_progress(job_id):
         UPDATE order_jobs
         SET completed_quantity = ?, status = ?
         WHERE id = ?
-    """, (completed_quantity, new_status, job_id))
+          AND company_id = ?
+    """, (completed_quantity, new_status, job_id, company_id))
 
     recalculate_job_dates(cursor, job_id)
 
     if parent_job_id:
-        sync_parent_job_status(cursor, parent_job_id)
+        sync_parent_job_status(cursor, parent_job_id, company_id=company_id)
 
-    sync_order_status(cursor, order_id)
+    sync_order_status(cursor, order_id, company_id=company_id)
 
     conn.commit()
     conn.close()
@@ -2710,42 +3486,36 @@ def update_job_progress(job_id):
 
 
 @app.route("/inventory")
+@permission_required("view_inventory")
 def inventory():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT
-            id,
-            item_code,
-            item_name,
-            measurement_unit,
-            unit_price,
-            stock_quantity,
-            min_stock
+        SELECT id, item_code, item_name, measurement_unit, unit_price, stock_quantity, min_stock
         FROM items
+        WHERE company_id = ?
         ORDER BY item_name ASC
-    """)
+    """, (company_id,))
     item_rows = cursor.fetchall()
 
     items_inventory = []
     total_items_value = 0
 
     for row in item_rows:
-        real_stock_quantity = float(row[5] or 0)
-        display_stock_quantity = max(0, real_stock_quantity)
+        stock_quantity = float(row[5] or 0)
         unit_price = float(row[4] or 0)
         min_stock = float(row[6] or 0)
-
-        stock_value = display_stock_quantity * unit_price
+        stock_value = stock_quantity * unit_price
         total_items_value += stock_value
 
-        if real_stock_quantity <= 0:
+        if stock_quantity <= 0:
             stock_status = "Out"
-        elif real_stock_quantity <= min_stock:
+        elif stock_quantity < min_stock:
             stock_status = "Low"
         else:
             stock_status = "OK"
@@ -2756,23 +3526,18 @@ def inventory():
             "item_name": row[2],
             "measurement_unit": row[3],
             "unit_price": unit_price,
-            "stock_quantity": display_stock_quantity,
-            "real_stock_quantity": real_stock_quantity,
+            "stock_quantity": stock_quantity,
             "min_stock": min_stock,
             "stock_value": stock_value,
             "stock_status": stock_status
         })
 
     cursor.execute("""
-        SELECT
-            id,
-            product_code,
-            product_name,
-            measurement_unit,
-            stock_quantity
+        SELECT id, product_code, product_name, measurement_unit, stock_quantity
         FROM products
+        WHERE company_id = ?
         ORDER BY product_name ASC
-    """)
+    """, (company_id,))
     product_rows = cursor.fetchall()
 
     products_inventory = []
@@ -2781,8 +3546,8 @@ def inventory():
     for row in product_rows:
         product_id = row[0]
         stock_quantity = float(row[4] or 0)
-        material_cost_per_unit = float(calculate_product_material_cost(cursor, product_id) or 0)
-        stock_value = max(0, stock_quantity) * material_cost_per_unit
+        material_cost = calculate_product_material_cost(cursor, product_id, company_id=company_id)
+        stock_value = stock_quantity * material_cost
         total_products_value += stock_value
 
         products_inventory.append({
@@ -2790,9 +3555,8 @@ def inventory():
             "product_code": row[1],
             "product_name": row[2],
             "measurement_unit": row[3],
-            "stock_quantity": max(0, stock_quantity),
-            "real_stock_quantity": stock_quantity,
-            "material_cost_per_unit": material_cost_per_unit,
+            "stock_quantity": stock_quantity,
+            "material_cost_per_unit": material_cost,
             "stock_value": stock_value
         })
 
@@ -2808,22 +3572,98 @@ def inventory():
     )
 
 
-@app.route("/inventory/items/<int:item_id>/add-stock", methods=["POST"])
-def add_item_stock(item_id):
+@app.route("/materials-shortage")
+@permission_required("manage_procurement")
+def materials_shortage():
     if not is_logged_in():
         return redirect(url_for("login"))
 
-    add_quantity = float(request.form.get("add_quantity", 0) or 0)
-    
+    company_id = get_company_id()
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
+        SELECT
+            i.id,
+            i.item_code,
+            i.item_name,
+            i.measurement_unit,
+            COALESCE(i.stock_quantity, 0),
+            COALESCE(i.min_stock, 0),
+            i.supplier_id,
+            s.name
+        FROM items i
+        LEFT JOIN suppliers s
+          ON i.supplier_id = s.id
+         AND s.company_id = i.company_id
+        WHERE i.company_id = ?
+          AND COALESCE(i.stock_quantity, 0) < COALESCE(i.min_stock, 0)
+        ORDER BY i.item_name ASC
+    """, (company_id,))
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    shortage_items = []
+    for row in rows:
+        stock_quantity = float(row[4] or 0)
+        min_stock = float(row[5] or 0)
+
+        shortage_items.append({
+            "id": row[0],
+            "item_code": row[1],
+            "item_name": row[2],
+            "unit": row[3],
+            "stock_quantity": stock_quantity,
+            "min_stock": min_stock,
+            "supplier_id": row[6],
+            "supplier_name": row[7],
+            "required_to_order": max(0, min_stock - stock_quantity)
+        })
+
+    return render_template(
+        "materials_shortage.html",
+        shortage_items=shortage_items,
+        active_page="shortage"
+    )
+
+
+@app.route("/inventory/items/<int:item_id>/add-stock", methods=["POST"])
+@permission_required("manage_inventory")
+def add_item_stock(item_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    add_quantity = float(request.form.get("add_quantity", 0) or 0)
+
+    if add_quantity <= 0:
+        flash("Add quantity must be greater than 0.", "error")
+        return redirect(request.referrer or url_for("inventory"))
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id
+        FROM items
+        WHERE id = ?
+          AND company_id = ?
+    """, (item_id, company_id))
+    item = cursor.fetchone()
+
+    if item is None:
+        conn.close()
+        flash("Item not found.", "error")
+        return redirect(request.referrer or url_for("inventory"))
+
+    cursor.execute("""
         UPDATE items
         SET stock_quantity = stock_quantity + ?
         WHERE id = ?
-    """, (add_quantity, item_id))
+          AND company_id = ?
+    """, (add_quantity, item_id, company_id))
 
     conn.commit()
     conn.close()
@@ -2836,16 +3676,35 @@ def add_product_stock(product_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     add_quantity = float(request.form.get("add_quantity", 0) or 0)
+
+    if add_quantity <= 0:
+        flash("Add quantity must be greater than 0.", "error")
+        return redirect(request.referrer or url_for("inventory"))
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
+        SELECT id
+        FROM products
+        WHERE id = ?
+          AND company_id = ?
+    """, (product_id, company_id))
+    product = cursor.fetchone()
+
+    if product is None:
+        conn.close()
+        flash("Product not found.", "error")
+        return redirect(request.referrer or url_for("inventory"))
+
+    cursor.execute("""
         UPDATE products
         SET stock_quantity = stock_quantity + ?
         WHERE id = ?
-    """, (add_quantity, product_id))
+          AND company_id = ?
+    """, (add_quantity, product_id, company_id))
 
     conn.commit()
     conn.close()
@@ -2853,105 +3712,7 @@ def add_product_stock(product_id):
     flash("Product stock added.", "success")
     return redirect(request.referrer or url_for("inventory"))
 
-@app.route("/materials-shortage")
-def materials_shortage():
-    if not is_logged_in():
-        return redirect(url_for("login"))
 
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT
-            id,
-            product_id,
-            quantity,
-            order_number,
-            status
-        FROM orders
-        WHERE product_id IS NOT NULL
-          AND status IN ('Waiting', 'In Progress', 'Delayed')
-        ORDER BY id DESC
-    """)
-    order_rows = cursor.fetchall()
-
-    required_by_item = {}
-
-    for order_id, product_id, order_quantity, order_number, status in order_rows:
-        if not product_id:
-            continue
-
-        try:
-            exploded_items = explode_bom_items_recursive(
-                cursor,
-                product_id,
-                float(order_quantity or 0)
-            )
-        except ValueError:
-            continue
-
-        for item_id, required_qty in exploded_items.items():
-            if item_id not in required_by_item:
-                required_by_item[item_id] = 0
-            required_by_item[item_id] += float(required_qty or 0)
-
-    shortage_items = []
-
-    if required_by_item:
-        item_ids = list(required_by_item.keys())
-        placeholders = ",".join(["?"] * len(item_ids))
-
-        cursor.execute(f"""
-            SELECT
-                id,
-                item_code,
-                item_name,
-                measurement_unit,
-                unit_price,
-                stock_quantity,
-                min_stock
-            FROM items
-            WHERE id IN ({placeholders})
-            ORDER BY item_name ASC
-        """, item_ids)
-        rows = cursor.fetchall()
-
-        for row in rows:
-            item_id = row[0]
-            item_code = row[1]
-            item_name = row[2]
-            measurement_unit = row[3]
-            unit_price = float(row[4] or 0)
-            stock_quantity = float(row[5] or 0)
-            min_stock = float(row[6] or 0)
-
-            required_quantity = float(required_by_item.get(item_id, 0))
-            available_stock = max(0, stock_quantity)
-
-            required_to_order = max(0, required_quantity - available_stock)
-
-            if required_to_order > 0:
-                shortage_items.append({
-                    "id": item_id,
-                    "item_code": item_code,
-                    "item_name": item_name,
-                    "unit": measurement_unit,
-                    "stock_quantity": available_stock,
-                    "real_stock_quantity": stock_quantity,
-                    "min_stock": min_stock,
-                    "required_quantity": required_quantity,
-                    "required_to_order": required_to_order,
-                    "shortage_value": required_to_order * unit_price,
-                    "status": "Out of stock" if available_stock <= 0 else "Below required"
-                })
-
-    conn.close()
-
-    return render_template(
-        "materials_shortage.html",
-        shortage_items=shortage_items,
-        active_page="shortage"
-    )
 
 
 @app.route("/planner")
@@ -2959,7 +3720,9 @@ def planner():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     today = datetime.today()
+
     year = request.args.get("year", type=int) or today.year
     month = request.args.get("month", type=int) or today.month
 
@@ -2971,119 +3734,99 @@ def planner():
         year += 1
 
     month_days = build_month_days(year, month)
-    month_start = month_days[0]["date"]
-    month_end = month_days[-1]["date"]
+    month_start = f"{year:04d}-{month:02d}-01"
+    month_end = f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
 
-    prev_month = month - 1
-    prev_year = year
-    if prev_month < 1:
-        prev_month = 12
-        prev_year -= 1
-
-    next_month = month + 1
-    next_year = year
-    if next_month > 12:
-        next_month = 1
-        next_year += 1
+    prev_month = 12 if month == 1 else month - 1
+    prev_year = year - 1 if month == 1 else year
+    next_month = 1 if month == 12 else month + 1
+    next_year = year + 1 if month == 12 else year
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT
-            w.id,
-            w.name,
-            w.description,
-            w.hours_per_shift,
-            w.shifts_per_day,
-            w.working_days_per_month,
-            w.color
-        FROM workstations w
-        ORDER BY w.name ASC
-    """)
+            id,
+            name,
+            color,
+            hours_per_shift,
+            shifts_per_day
+        FROM workstations
+        WHERE company_id = ?
+        ORDER BY name ASC
+    """, (company_id,))
     workstation_rows = cursor.fetchall()
 
     workstations = []
+    workstation_map = {}
+
     for row in workstation_rows:
-        workstations.append({
+        workstation = {
             "id": row[0],
             "name": row[1],
-            "description": row[2],
-            "hours_per_shift": row[3],
-            "shifts_per_day": row[4],
-            "working_days_per_month": row[5],
-            "color": row[6]
-        })
+            "color": row[2] or "#3b82f6",
+            "hours_per_shift": float(row[3] or 0),
+            "shifts_per_day": float(row[4] or 0)
+        }
+        workstations.append(workstation)
+        workstation_map[row[0]] = workstation
+
+    jobs_by_workstation = {w["id"]: [] for w in workstations}
+    unscheduled_jobs = []
 
     cursor.execute("""
         SELECT
             oj.id,
             oj.workstation_id,
-            o.order_number,
-            COALESCE(jp.product_name, '-') AS product_name,
             oj.job_name,
             oj.status,
             oj.planned_start,
             oj.planned_end,
-            oj.estimated_hours,
-            oj.planned_quantity,
             oj.completed_quantity,
+            oj.planned_quantity,
+            oj.estimated_hours,
+            o.order_number,
+            p.product_name,
             oj.parent_job_id,
-            oj.is_split_child,
-            (
-                SELECT COUNT(*)
-                FROM order_jobs child
-                WHERE child.parent_job_id = oj.id
-                  AND child.is_split_child = 1
-            ) AS child_count
+            oj.is_split_child
         FROM order_jobs oj
-        JOIN orders o ON oj.order_id = o.id
-        LEFT JOIN products jp ON oj.job_product_id = jp.id
-        ORDER BY oj.workstation_id ASC, oj.planned_start ASC, oj.id ASC
-    """)
-    job_rows = cursor.fetchall()
+        JOIN orders o
+          ON oj.order_id = o.id
+         AND o.company_id = oj.company_id
+        LEFT JOIN products p
+          ON oj.job_product_id = p.id
+         AND p.company_id = oj.company_id
+        WHERE oj.company_id = ?
+        ORDER BY o.order_number ASC, oj.sequence ASC, oj.id ASC
+    """, (company_id,))
+    rows = cursor.fetchall()
     conn.close()
 
-    workstation_map = {ws["id"]: ws for ws in workstations}
-
-    jobs_by_workstation = {}
-    for ws in workstations:
-        jobs_by_workstation[ws["id"]] = []
-
-    unscheduled_jobs = []
-
-    for row in job_rows:
-        child_count = int(row[13] or 0)
-
-        if child_count > 0:
-            continue
-
-        job_id = row[0]
+    for row in rows:
         workstation_id = row[1]
-        planned_start = row[6]
-        planned_end = row[7]
+        planned_start = row[4]
+        planned_end = row[5]
+        planned_quantity = float(row[7] or 0)
+        completed_quantity = float(row[6] or 0)
 
-        planned_quantity = float(row[9] or 0)
-        completed_quantity = float(row[10] or 0)
-
+        progress_percent = 0
         if planned_quantity > 0:
-            progress_percent = round((completed_quantity / planned_quantity) * 100, 1)
-        else:
-            progress_percent = 0
+            progress_percent = min(100, max(0, (completed_quantity / planned_quantity) * 100))
 
         job = {
-            "id": job_id,
+            "id": row[0],
             "workstation_id": workstation_id,
-            "order_number": row[2],
-            "product_name": row[3],
-            "job_name": row[4],
-            "status": row[5],
+            "job_name": row[2],
+            "status": row[3],
             "planned_start": planned_start,
             "planned_end": planned_end,
             "estimated_hours": row[8],
             "planned_quantity": planned_quantity,
             "completed_quantity": completed_quantity,
             "progress_percent": progress_percent,
+            "order_number": row[9],
+            "product_name": row[10] if row[10] else "-",
             "parent_job_id": row[11],
             "is_split_child": int(row[12] or 0)
         }
@@ -3138,15 +3881,29 @@ def planner():
     )
 
 
+
 @app.route("/planner/update-job-date/<int:job_id>", methods=["POST"])
 def update_planner_job_date(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     planned_start = request.form.get("planned_start", "").strip()
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id
+        FROM order_jobs
+        WHERE id = ? AND company_id = ?
+    """, (job_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        return ("", 404)
+
     recalculate_job_dates(cursor, job_id, planned_start or None)
     conn.commit()
     conn.close()
@@ -3158,6 +3915,7 @@ def split_job(job_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     workstation_ids = request.form.getlist("split_workstation_id")
     quantities = request.form.getlist("split_quantity")
 
@@ -3171,6 +3929,7 @@ def split_job(job_id):
             continue
 
         try:
+            ws_id = int(workstation_id)
             qty_value = float(quantity)
         except ValueError:
             return redirect_back("jobs")
@@ -3179,7 +3938,7 @@ def split_job(job_id):
             continue
 
         split_rows.append({
-            "workstation_id": workstation_id,
+            "workstation_id": ws_id,
             "quantity": qty_value
         })
 
@@ -3191,6 +3950,10 @@ def split_job(job_id):
     cursor = conn.cursor()
 
     try:
+        require_company_record(cursor, "order_jobs", job_id, company_id, "Job not found.")
+        for row in split_rows:
+            require_company_record(cursor, "workstations", row["workstation_id"], company_id, "Workstation not found.")
+
         create_split_children(cursor, job_id, split_rows)
         conn.commit()
         flash("Job split successfully.", "success")
@@ -3208,6 +3971,7 @@ def workstations():
     if not is_logged_in():
         return redirect(url_for("login"))
 
+    company_id = get_company_id()
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
@@ -3231,6 +3995,7 @@ def workstations():
                 )
                 FROM order_jobs oj
                 WHERE oj.workstation_id = w.id
+                  AND oj.company_id = w.company_id
                   AND oj.status != 'Done'
                   AND (
                         oj.is_split_child = 1
@@ -3239,13 +4004,14 @@ def workstations():
                             FROM order_jobs child
                             WHERE child.parent_job_id = oj.id
                               AND child.is_split_child = 1
+                              AND child.company_id = oj.company_id
                         )
                       )
             ), 0) AS used_load
         FROM workstations w
+        WHERE w.company_id = ?
         ORDER BY w.name ASC
-    """)
-
+    """, (company_id,))
     rows = cursor.fetchall()
     conn.close()
 
@@ -3273,6 +4039,1464 @@ def workstations():
         workstations=workstations,
         active_page="workstations"
     )
+
+
+
+@app.route("/users")
+@permission_required("manage_users")
+def users():
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, full_name, email, role, COALESCE(is_active, 1)
+        FROM users
+        WHERE company_id = ?
+        ORDER BY id ASC
+    """, (company_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    users = []
+    for row in rows:
+        user_id = row[0]
+        role = row[3] or "worker"
+        effective_permissions = get_effective_permissions(user_id=user_id, role=role)
+
+        users.append({
+            "id": user_id,
+            "full_name": row[1],
+            "email": row[2],
+            "role": role,
+            "is_active": int(row[4] or 0),
+            "permissions": sorted(effective_permissions),
+        })
+
+    return render_template(
+        "users.html",
+        users=users,
+        permission_keys=ALL_PERMISSION_KEYS,
+        active_page="users"
+    )
+
+@app.route("/users/new", methods=["GET", "POST"])
+@permission_required("manage_users")
+def new_user():
+    company_id = get_company_id()
+
+    if request.method == "POST":
+        full_name = request.form["full_name"].strip()
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+        confirm_password = request.form["confirm_password"]
+        role = request.form.get("role", "worker").strip().lower()
+
+        if not full_name or not email or not password:
+            flash("All fields are required.", "error")
+            return redirect(url_for("new_user"))
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for("new_user"))
+
+        if role not in ROLE_DEFAULT_PERMISSIONS:
+            flash("Invalid role.", "error")
+            return redirect(url_for("new_user"))
+
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        existing = cursor.fetchone()
+
+        if existing:
+            conn.close()
+            flash("Email already exists.", "error")
+            return redirect(url_for("new_user"))
+
+        hashed_password = generate_password_hash(password)
+
+        cursor.execute("""
+            INSERT INTO users (full_name, company, email, password, company_id, role, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+        """, (
+            full_name,
+            session.get("company_name", ""),
+            email,
+            hashed_password,
+            company_id,
+            role
+        ))
+
+        user_id = cursor.lastrowid
+
+        for permission_key in ALL_PERMISSION_KEYS:
+            form_value = request.form.get(f"perm_{permission_key}")
+            default_has = permission_key in get_role_default_permissions(role)
+            selected_has = bool(form_value)
+
+            if selected_has != default_has:
+                cursor.execute("""
+                    INSERT INTO user_permissions (user_id, permission_key, allowed)
+                    VALUES (?, ?, ?)
+                """, (user_id, permission_key, 1 if selected_has else 0))
+
+        conn.commit()
+        conn.close()
+
+        flash("User created successfully.", "success")
+        return redirect(url_for("users"))
+
+    return render_template(
+        "new_user.html",
+        permission_keys=ALL_PERMISSION_KEYS,
+        role_defaults=ROLE_DEFAULT_PERMISSIONS,
+        active_page="users"
+    )
+
+
+@app.route("/users/<int:user_id>/role", methods=["POST"])
+@permission_required("manage_users")
+def update_user_role(user_id):
+    company_id = get_company_id()
+    current_user_id = session.get("user_id")
+    new_role = request.form.get("role", "worker").strip().lower()
+
+    if new_role not in ROLE_DEFAULT_PERMISSIONS:
+        flash("Invalid role.", "error")
+        return redirect(url_for("users"))
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id
+        FROM users
+        WHERE id = ? AND company_id = ?
+    """, (user_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("User not found.", "error")
+        return redirect(url_for("users"))
+
+    if user_id == current_user_id and new_role != "admin":
+        conn.close()
+        flash("You cannot remove admin role from your own account.", "error")
+        return redirect(url_for("users"))
+
+    cursor.execute("""
+        UPDATE users
+        SET role = ?
+        WHERE id = ? AND company_id = ?
+    """, (new_role, user_id, company_id))
+
+    conn.commit()
+    conn.close()
+
+    flash("Role updated.", "success")
+    return redirect(url_for("users"))
+
+
+@app.route("/users/<int:user_id>/permissions", methods=["POST"])
+@permission_required("manage_users")
+def update_user_permissions(user_id):
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT role
+        FROM users
+        WHERE id = ? AND company_id = ?
+    """, (user_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("User not found.", "error")
+        return redirect(url_for("users"))
+
+    role = (row[0] or "worker").lower()
+    defaults = get_role_default_permissions(role)
+
+    cursor.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+
+    for permission_key in ALL_PERMISSION_KEYS:
+        selected_has = request.form.get(f"perm_{permission_key}") == "1"
+        default_has = permission_key in defaults
+
+        if selected_has != default_has:
+            cursor.execute("""
+                INSERT INTO user_permissions (user_id, permission_key, allowed)
+                VALUES (?, ?, ?)
+            """, (user_id, permission_key, 1 if selected_has else 0))
+
+    conn.commit()
+    conn.close()
+
+    flash("Permissions updated.", "success")
+    return redirect(url_for("users"))
+    
+
+@app.route("/account")
+@permission_required("view_dashboard")
+def account():
+    user_id = session.get("user_id")
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, full_name, email, role, COALESCE(is_active, 1)
+        FROM users
+        WHERE id = ? AND company_id = ?
+    """, (user_id, company_id))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        flash("Account not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    account_user = {
+        "id": row[0],
+        "full_name": row[1],
+        "email": row[2],
+        "role": row[3],
+        "is_active": int(row[4] or 0),
+        "permissions": sorted(get_effective_permissions(user_id=row[0], role=row[3])),
+    }
+
+    permission_groups = {
+        "Orders": ["view_orders", "manage_orders"],
+        "Jobs": ["view_jobs", "update_job_progress", "manage_jobs"],
+        "Inventory": ["view_inventory", "manage_inventory"],
+        "Products & Items": ["view_products", "manage_products", "view_items", "manage_items"],
+        "Workstations": ["view_workstations", "manage_workstations"],
+        "Reports & Export": ["view_reports", "export_data"],
+        "Administration": ["manage_users"],
+        "Procurement": ["manage_procurement"],
+    }
+
+    return render_template(
+        "account.html",
+        account_user=account_user,
+        permission_groups=permission_groups,
+        active_page="account"
+    )   
+
+
+@app.route("/account/change-password", methods=["POST"])
+@permission_required("view_dashboard")
+def change_password():
+    user_id = session.get("user_id")
+    company_id = get_company_id()
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not current_password or not new_password or not confirm_password:
+        flash("All password fields are required.", "error")
+        return redirect(url_for("account"))
+
+    if new_password != confirm_password:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("account"))
+
+    if len(new_password) < 6:
+        flash("New password must be at least 6 characters.", "error")
+        return redirect(url_for("account"))
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT password
+        FROM users
+        WHERE id = ? AND company_id = ?
+    """, (user_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("Account not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    current_password_hash = row[0]
+
+    if not check_password_hash(current_password_hash, current_password):
+        conn.close()
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("account"))
+
+    new_password_hash = generate_password_hash(new_password)
+
+    cursor.execute("""
+        UPDATE users
+        SET password = ?
+        WHERE id = ? AND company_id = ?
+    """, (new_password_hash, user_id, company_id))
+
+    conn.commit()
+    conn.close()
+
+    flash("Password updated successfully.", "success")
+    return redirect(url_for("account"))
+# ---------------------------
+# SUPPLIERS LIST
+# ---------------------------
+@app.route("/suppliers")
+@permission_required("manage_procurement")
+def suppliers():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    search = request.args.get("search", "").strip()
+    status_filter = request.args.get("status", "").strip().lower()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT
+            id,
+            company_id,
+            name,
+            supplier_code,
+            contact_person,
+            email,
+            phone,
+            address,
+            notes,
+            is_active,
+            created_at
+        FROM suppliers
+        WHERE company_id = ?
+    """
+    params = [company_id]
+
+    if search:
+        sql += """
+          AND (
+                LOWER(COALESCE(name, '')) LIKE ?
+             OR LOWER(COALESCE(supplier_code, '')) LIKE ?
+             OR LOWER(COALESCE(contact_person, '')) LIKE ?
+             OR LOWER(COALESCE(email, '')) LIKE ?
+             OR LOWER(COALESCE(phone, '')) LIKE ?
+          )
+        """
+        like_value = f"%{search.lower()}%"
+        params.extend([like_value, like_value, like_value, like_value, like_value])
+
+    if status_filter == "active":
+        sql += " AND COALESCE(is_active, 0) = 1"
+    elif status_filter == "inactive":
+        sql += " AND COALESCE(is_active, 0) = 0"
+
+    sql += " ORDER BY created_at DESC, id DESC"
+
+    cursor.execute(sql, tuple(params))
+    suppliers = cursor.fetchall()
+    conn.close()
+
+    return render_template(
+        "suppliers.html",
+        suppliers=suppliers,
+        active_page="suppliers",
+        search=search,
+        status_filter=status_filter
+    )
+
+
+@app.route("/suppliers/new", methods=["GET", "POST"])
+@permission_required("manage_suppliers")
+def new_supplier():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        supplier_code = request.form.get("supplier_code", "").strip()
+        contact_person = request.form.get("contact_person", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        address = request.form.get("address", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not name:
+            conn.close()
+            flash("Supplier name is required.", "error")
+            return redirect(url_for("new_supplier"))
+
+        cursor.execute("""
+            INSERT INTO suppliers (
+                company_id,
+                name,
+                supplier_code,
+                contact_person,
+                email,
+                phone,
+                address,
+                notes,
+                is_active
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, (
+            company_id,
+            name,
+            supplier_code or None,
+            contact_person or None,
+            email or None,
+            phone or None,
+            address or None,
+            notes or None
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Supplier created successfully.", "success")
+        return redirect(url_for("suppliers"))
+
+    conn.close()
+    return render_template(
+        "new_supplier.html",
+        active_page="suppliers"
+    )
+
+@app.route("/suppliers/<int:supplier_id>/edit", methods=["GET", "POST"])
+@permission_required("manage_suppliers")
+def edit_supplier(supplier_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            company_id,
+            name,
+            supplier_code,
+            contact_person,
+            email,
+            phone,
+            address,
+            notes,
+            is_active,
+            created_at
+        FROM suppliers
+        WHERE id = ? AND company_id = ?
+    """, (supplier_id, company_id))
+
+    supplier = cursor.fetchone()
+
+    if supplier is None:
+        conn.close()
+        flash("Supplier not found.", "error")
+        return redirect(url_for("suppliers"))
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        supplier_code = request.form.get("supplier_code", "").strip()
+        contact_person = request.form.get("contact_person", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        address = request.form.get("address", "").strip()
+        notes = request.form.get("notes", "").strip()
+        is_active = 1 if request.form.get("is_active") == "on" else 0
+
+        if not name:
+            conn.close()
+            flash("Supplier name is required.", "error")
+            return redirect(url_for("edit_supplier", supplier_id=supplier_id))
+
+        cursor.execute("""
+            UPDATE suppliers
+            SET
+                name = ?,
+                supplier_code = ?,
+                contact_person = ?,
+                email = ?,
+                phone = ?,
+                address = ?,
+                notes = ?,
+                is_active = ?
+            WHERE id = ? AND company_id = ?
+        """, (
+            name,
+            supplier_code or None,
+            contact_person or None,
+            email or None,
+            phone or None,
+            address or None,
+            notes or None,
+            is_active,
+            supplier_id,
+            company_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Supplier updated successfully.", "success")
+        return redirect(url_for("suppliers"))
+
+    conn.close()
+    return render_template(
+        "edit_supplier.html",
+        supplier=supplier,
+        active_page="suppliers"
+    )
+
+
+@app.route("/procurement/requests")
+@permission_required("manage_procurement")
+def purchase_requests():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    search = request.args.get("search", "").strip()
+    status_filter = request.args.get("status", "").strip().lower()
+    priority_filter = request.args.get("priority", "").strip().lower()
+    supplier_filter = request.args.get("supplier_id", "").strip()
+    history_search = request.args.get("history_search", "").strip()
+    history_status_filter = request.args.get("history_status", "").strip().lower()
+    history_priority_filter = request.args.get("history_priority", "").strip().lower()
+    history_supplier_filter = request.args.get("history_supplier_id", "").strip()
+    show_history = request.args.get("show_history", "").strip()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    active_sql = """
+        SELECT
+            pr.id,
+            pr.company_id,
+            pr.request_number,
+            pr.item_id,
+            pr.supplier_id,
+            pr.title,
+            pr.description,
+            pr.quantity,
+            pr.unit,
+            pr.status,
+            pr.priority,
+            pr.needed_by,
+            pr.requested_by,
+            pr.approved_by,
+            pr.ordered_by,
+            pr.notes,
+            pr.created_at,
+            pr.updated_at,
+            s.name AS supplier_name,
+            u.full_name AS requester_name,
+            i.item_name AS item_name
+        FROM purchase_requests pr
+        LEFT JOIN suppliers s
+          ON pr.supplier_id = s.id
+         AND s.company_id = pr.company_id
+        LEFT JOIN users u
+          ON pr.requested_by = u.id
+         AND u.company_id = pr.company_id
+        LEFT JOIN items i
+          ON pr.item_id = i.id
+         AND i.company_id = pr.company_id
+        WHERE pr.company_id = ?
+          AND COALESCE(pr.status, 'draft') NOT IN ('received', 'cancelled', 'rejected')
+    """
+    active_params = [company_id]
+
+    if search:
+        active_sql += """
+          AND (
+                LOWER(COALESCE(pr.request_number, '')) LIKE ?
+             OR LOWER(COALESCE(pr.title, '')) LIKE ?
+             OR LOWER(COALESCE(pr.description, '')) LIKE ?
+             OR LOWER(COALESCE(s.name, '')) LIKE ?
+             OR LOWER(COALESCE(i.item_name, '')) LIKE ?
+          )
+        """
+        like_value = f"%{search.lower()}%"
+        active_params.extend([like_value, like_value, like_value, like_value, like_value])
+
+    if status_filter in ("draft", "submitted", "approved", "ordered"):
+        active_sql += " AND LOWER(COALESCE(pr.status, 'draft')) = ?"
+        active_params.append(status_filter)
+
+    if priority_filter in ("low", "normal", "high"):
+        active_sql += " AND LOWER(COALESCE(pr.priority, 'normal')) = ?"
+        active_params.append(priority_filter)
+
+    if supplier_filter:
+        try:
+            active_sql += " AND pr.supplier_id = ?"
+            active_params.append(int(supplier_filter))
+        except ValueError:
+            pass
+
+    active_sql += " ORDER BY pr.created_at DESC, pr.id DESC"
+
+    cursor.execute(active_sql, tuple(active_params))
+    requests = cursor.fetchall()
+
+    archive_sql = """
+        SELECT
+            pr.id,
+            pr.company_id,
+            pr.request_number,
+            pr.item_id,
+            pr.supplier_id,
+            pr.title,
+            pr.description,
+            pr.quantity,
+            pr.unit,
+            pr.status,
+            pr.priority,
+            pr.needed_by,
+            pr.requested_by,
+            pr.approved_by,
+            pr.ordered_by,
+            pr.notes,
+            pr.created_at,
+            pr.updated_at,
+            s.name AS supplier_name,
+            u.full_name AS requester_name,
+            i.item_name AS item_name
+        FROM purchase_requests pr
+        LEFT JOIN suppliers s
+          ON pr.supplier_id = s.id
+         AND s.company_id = pr.company_id
+        LEFT JOIN users u
+          ON pr.requested_by = u.id
+         AND u.company_id = pr.company_id
+        LEFT JOIN items i
+          ON pr.item_id = i.id
+         AND i.company_id = pr.company_id
+        WHERE pr.company_id = ?
+          AND COALESCE(pr.status, 'draft') IN ('received', 'cancelled', 'rejected')
+    """
+    archive_params = [company_id]
+
+    if history_search:
+        archive_sql += """
+          AND (
+                LOWER(COALESCE(pr.request_number, '')) LIKE ?
+             OR LOWER(COALESCE(pr.title, '')) LIKE ?
+             OR LOWER(COALESCE(pr.description, '')) LIKE ?
+             OR LOWER(COALESCE(s.name, '')) LIKE ?
+             OR LOWER(COALESCE(i.item_name, '')) LIKE ?
+          )
+        """
+        history_like_value = f"%{history_search.lower()}%"
+        archive_params.extend([
+            history_like_value,
+            history_like_value,
+            history_like_value,
+            history_like_value,
+            history_like_value
+        ])
+
+    if history_status_filter in ("received", "cancelled", "rejected"):
+        archive_sql += " AND LOWER(COALESCE(pr.status, 'draft')) = ?"
+        archive_params.append(history_status_filter)
+
+    if history_priority_filter in ("low", "normal", "high"):
+        archive_sql += " AND LOWER(COALESCE(pr.priority, 'normal')) = ?"
+        archive_params.append(history_priority_filter)
+
+    if history_supplier_filter:
+        try:
+            archive_sql += " AND pr.supplier_id = ?"
+            archive_params.append(int(history_supplier_filter))
+        except ValueError:
+            pass
+
+    archive_sql += " ORDER BY COALESCE(pr.updated_at, pr.created_at) DESC, pr.id DESC"
+
+    cursor.execute(archive_sql, tuple(archive_params))
+    archived_requests = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT id, name
+        FROM suppliers
+        WHERE company_id = ?
+        ORDER BY name ASC
+    """, (company_id,))
+    supplier_options = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "purchase_requests.html",
+        requests=requests,
+        archived_requests=archived_requests,
+        supplier_options=supplier_options,
+        active_page="purchase_requests",
+        search=search,
+        status_filter=status_filter,
+        priority_filter=priority_filter,
+        supplier_filter=supplier_filter,
+        history_search=history_search,
+        history_status_filter=history_status_filter,
+        history_priority_filter=history_priority_filter,
+        history_supplier_filter=history_supplier_filter,
+        show_history=(show_history == "1")
+    )
+
+
+@app.route("/procurement/requests/new", methods=["GET", "POST"])
+@permission_required("manage_procurement")
+def new_purchase_request():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        item_id_raw = request.form.get("item_id", "").strip()
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        quantity_raw = request.form.get("quantity", "").strip()
+        unit = request.form.get("unit", "").strip()
+        supplier_id_raw = request.form.get("supplier_id", "").strip()
+        priority = request.form.get("priority", "normal").strip().lower()
+        needed_by = request.form.get("needed_by", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        item_id = None
+        selected_item_name = None
+        selected_item_unit = None
+        selected_item_supplier_id = None
+
+        if item_id_raw:
+            try:
+                item_id = int(item_id_raw)
+            except ValueError:
+                conn.close()
+                flash("Invalid item selected.", "error")
+                return redirect(url_for("new_purchase_request"))
+
+            cursor.execute("""
+                SELECT id, item_name, measurement_unit, supplier_id
+                FROM items
+                WHERE id = ? AND company_id = ?
+            """, (item_id, company_id))
+            item_row = cursor.fetchone()
+
+            if item_row is None:
+                conn.close()
+                flash("Selected item was not found.", "error")
+                return redirect(url_for("new_purchase_request"))
+
+            selected_item_name = item_row[1]
+            selected_item_unit = item_row[2]
+            selected_item_supplier_id = item_row[3]
+
+        if not title:
+            title = selected_item_name or ""
+
+        if not title:
+            conn.close()
+            flash("Request title is required.", "error")
+            return redirect(url_for("new_purchase_request"))
+
+        if not quantity_raw:
+            conn.close()
+            flash("Quantity is required.", "error")
+            return redirect(url_for("new_purchase_request"))
+
+        try:
+            quantity = float(quantity_raw)
+        except ValueError:
+            conn.close()
+            flash("Quantity must be a valid number.", "error")
+            return redirect(url_for("new_purchase_request"))
+
+        if quantity <= 0:
+            conn.close()
+            flash("Quantity must be greater than zero.", "error")
+            return redirect(url_for("new_purchase_request"))
+
+        if not unit and selected_item_unit:
+            unit = selected_item_unit
+
+        if not unit:
+            conn.close()
+            flash("Unit is required.", "error")
+            return redirect(url_for("new_purchase_request"))
+
+        if priority not in ("low", "normal", "high"):
+            priority = "normal"
+
+        if not supplier_id_raw and selected_item_supplier_id:
+            supplier_id_raw = str(selected_item_supplier_id)
+
+        supplier_id = None
+        if supplier_id_raw:
+            try:
+                supplier_id = int(supplier_id_raw)
+            except ValueError:
+                conn.close()
+                flash("Invalid supplier selected.", "error")
+                return redirect(url_for("new_purchase_request"))
+
+            cursor.execute("""
+                SELECT id
+                FROM suppliers
+                WHERE id = ? AND company_id = ?
+            """, (supplier_id, company_id))
+            supplier_row = cursor.fetchone()
+
+            if supplier_row is None:
+                conn.close()
+                flash("Selected supplier was not found.", "error")
+                return redirect(url_for("new_purchase_request"))
+
+        cursor.execute("""
+            INSERT INTO purchase_requests (
+                company_id,
+                request_number,
+                item_id,
+                supplier_id,
+                title,
+                description,
+                quantity,
+                unit,
+                status,
+                priority,
+                needed_by,
+                requested_by,
+                approved_by,
+                ordered_by,
+                notes,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (
+            company_id,
+            None,
+            item_id,
+            supplier_id,
+            title,
+            description or None,
+            quantity,
+            unit,
+            "draft",
+            priority,
+            needed_by or None,
+            user_id,
+            None,
+            None,
+            notes or None
+        ))
+
+        new_request_id = cursor.lastrowid
+        request_number = f"PR-{new_request_id:05d}"
+
+        cursor.execute("""
+            UPDATE purchase_requests
+            SET request_number = ?
+            WHERE id = ? AND company_id = ?
+        """, (request_number, new_request_id, company_id))
+
+        conn.commit()
+        conn.close()
+
+        flash("Purchase request created successfully.", "success")
+        return redirect(url_for("purchase_requests"))
+
+    cursor.execute("""
+        SELECT id, name
+        FROM suppliers
+        WHERE company_id = ? AND is_active = 1
+        ORDER BY name ASC
+    """, (company_id,))
+    suppliers = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            i.id,
+            i.item_name,
+            i.measurement_unit,
+            i.supplier_id,
+            s.name
+        FROM items i
+        LEFT JOIN suppliers s
+          ON i.supplier_id = s.id
+         AND s.company_id = i.company_id
+        WHERE i.company_id = ?
+        ORDER BY i.item_name ASC
+    """, (company_id,))
+    items = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "new_purchase_request.html",
+        suppliers=suppliers,
+        items=items,
+        active_page="purchase_requests"
+    )
+
+
+@app.route("/procurement/requests/<int:request_id>/status/<status>")
+@permission_required("manage_procurement")
+def update_request_status(request_id, status):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+    status = (status or "").strip().lower()
+
+    allowed_statuses = {"submitted", "approved", "rejected", "ordered", "cancelled"}
+
+    if status not in allowed_statuses:
+        flash("Invalid status.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, status
+        FROM purchase_requests
+        WHERE id = ? AND company_id = ?
+    """, (request_id, company_id))
+
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("Purchase request not found.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    current_status = (row[1] or "").lower()
+
+    allowed_transitions = {
+        "draft": {"submitted", "cancelled"},
+        "submitted": {"approved", "rejected", "cancelled"},
+        "approved": {"ordered", "cancelled"},
+        "ordered": set(),
+        "rejected": set(),
+        "cancelled": set()
+    }
+
+    if status not in allowed_transitions.get(current_status, set()):
+        conn.close()
+        flash(f"Cannot change status from {current_status} to {status}.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    approved_by = None
+    ordered_by = None
+
+    if status == "approved":
+        approved_by = user_id
+
+    if status == "ordered":
+        ordered_by = user_id
+
+    cursor.execute("""
+        UPDATE purchase_requests
+        SET
+            status = ?,
+            approved_by = COALESCE(?, approved_by),
+            ordered_by = COALESCE(?, ordered_by),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND company_id = ?
+    """, (
+        status,
+        approved_by,
+        ordered_by,
+        request_id,
+        company_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    flash(f"Request marked as {status}.", "success")
+    return redirect(url_for("purchase_requests"))
+
+
+@app.route("/procurement/requests/<int:request_id>/edit", methods=["GET", "POST"])
+@permission_required("manage_procurement")
+def edit_purchase_request(request_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            company_id,
+            request_number,
+            item_id,
+            supplier_id,
+            title,
+            description,
+            quantity,
+            unit,
+            status,
+            priority,
+            needed_by,
+            requested_by,
+            approved_by,
+            ordered_by,
+            notes,
+            created_at,
+            updated_at
+        FROM purchase_requests
+        WHERE id = ? AND company_id = ?
+    """, (request_id, company_id))
+
+    purchase_request = cursor.fetchone()
+
+    if purchase_request is None:
+        conn.close()
+        flash("Purchase request not found.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    current_status = (purchase_request[9] or "").lower()
+
+    if current_status not in ("draft", "submitted"):
+        conn.close()
+        flash("Only draft or submitted requests can be edited.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    if request.method == "POST":
+        item_id_raw = request.form.get("item_id", "").strip()
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        quantity_raw = request.form.get("quantity", "").strip()
+        unit = request.form.get("unit", "").strip()
+        supplier_id_raw = request.form.get("supplier_id", "").strip()
+        priority = request.form.get("priority", "normal").strip().lower()
+        needed_by = request.form.get("needed_by", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        item_id = None
+        selected_item_name = None
+        selected_item_unit = None
+        selected_item_supplier_id = None
+
+        if item_id_raw:
+            try:
+                item_id = int(item_id_raw)
+            except ValueError:
+                conn.close()
+                flash("Invalid item selected.", "error")
+                return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+            cursor.execute("""
+                SELECT id, item_name, measurement_unit, supplier_id
+                FROM items
+                WHERE id = ? AND company_id = ?
+            """, (item_id, company_id))
+            item_row = cursor.fetchone()
+
+            if item_row is None:
+                conn.close()
+                flash("Selected item was not found.", "error")
+                return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+            selected_item_name = item_row[1]
+            selected_item_unit = item_row[2]
+            selected_item_supplier_id = item_row[3]
+
+        if not title:
+            title = selected_item_name or ""
+
+        if not title:
+            conn.close()
+            flash("Request title is required.", "error")
+            return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        if not quantity_raw:
+            conn.close()
+            flash("Quantity is required.", "error")
+            return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        try:
+            quantity = float(quantity_raw)
+        except ValueError:
+            conn.close()
+            flash("Quantity must be a valid number.", "error")
+            return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        if quantity <= 0:
+            conn.close()
+            flash("Quantity must be greater than zero.", "error")
+            return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        if not unit and selected_item_unit:
+            unit = selected_item_unit
+
+        if not unit:
+            conn.close()
+            flash("Unit is required.", "error")
+            return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        if priority not in ("low", "normal", "high"):
+            priority = "normal"
+
+        if not supplier_id_raw and selected_item_supplier_id:
+            supplier_id_raw = str(selected_item_supplier_id)
+
+        supplier_id = None
+        if supplier_id_raw:
+            try:
+                supplier_id = int(supplier_id_raw)
+            except ValueError:
+                conn.close()
+                flash("Invalid supplier selected.", "error")
+                return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+            cursor.execute("""
+                SELECT id
+                FROM suppliers
+                WHERE id = ? AND company_id = ?
+            """, (supplier_id, company_id))
+
+            supplier_row = cursor.fetchone()
+
+            if supplier_row is None:
+                conn.close()
+                flash("Selected supplier was not found.", "error")
+                return redirect(url_for("edit_purchase_request", request_id=request_id))
+
+        cursor.execute("""
+            UPDATE purchase_requests
+            SET
+                item_id = ?,
+                supplier_id = ?,
+                title = ?,
+                description = ?,
+                quantity = ?,
+                unit = ?,
+                priority = ?,
+                needed_by = ?,
+                notes = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND company_id = ?
+        """, (
+            item_id,
+            supplier_id,
+            title,
+            description or None,
+            quantity,
+            unit,
+            priority,
+            needed_by or None,
+            notes or None,
+            request_id,
+            company_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Purchase request updated successfully.", "success")
+        return redirect(url_for("purchase_requests"))
+
+    cursor.execute("""
+        SELECT id, name
+        FROM suppliers
+        WHERE company_id = ? AND is_active = 1
+        ORDER BY name ASC
+    """, (company_id,))
+    suppliers = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            i.id,
+            i.item_name,
+            i.measurement_unit,
+            i.supplier_id,
+            s.name
+        FROM items i
+        LEFT JOIN suppliers s
+          ON i.supplier_id = s.id
+         AND s.company_id = i.company_id
+        WHERE i.company_id = ?
+        ORDER BY i.item_name ASC
+    """, (company_id,))
+    items = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "edit_purchase_request.html",
+        purchase_request=purchase_request,
+        suppliers=suppliers,
+        items=items,
+        active_page="purchase_requests"
+    )
+
+
+@app.route("/procurement/requests/<int:request_id>/receive", methods=["POST"])
+@permission_required("manage_procurement")
+def receive_purchase_request(request_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            item_id,
+            quantity,
+            status,
+            title,
+            unit
+        FROM purchase_requests
+        WHERE id = ?
+          AND company_id = ?
+    """, (request_id, company_id))
+
+    request_row = cursor.fetchone()
+
+    if request_row is None:
+        conn.close()
+        flash("Purchase request not found.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    item_id = request_row[1]
+    quantity = float(request_row[2] or 0)
+    current_status = (request_row[3] or "").lower()
+    request_title = request_row[4] or "Request"
+
+    if current_status != "ordered":
+        conn.close()
+        flash("Only ordered requests can be received.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    if not item_id:
+        conn.close()
+        flash("This request is not linked to an inventory item, so stock cannot be received.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    if quantity <= 0:
+        conn.close()
+        flash("Received quantity must be greater than zero.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    cursor.execute("""
+        SELECT id
+        FROM items
+        WHERE id = ?
+          AND company_id = ?
+    """, (item_id, company_id))
+    item_row = cursor.fetchone()
+
+    if item_row is None:
+        conn.close()
+        flash("Linked inventory item was not found.", "error")
+        return redirect(url_for("purchase_requests"))
+
+    cursor.execute("""
+        UPDATE items
+        SET stock_quantity = COALESCE(stock_quantity, 0) + ?
+        WHERE id = ?
+          AND company_id = ?
+    """, (quantity, item_id, company_id))
+
+    cursor.execute("""
+        UPDATE purchase_requests
+        SET
+            status = 'received',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND company_id = ?
+    """, (request_id, company_id))
+
+    conn.commit()
+    conn.close()
+
+    flash(f"{request_title} received and inventory updated.", "success")
+    return redirect(url_for("purchase_requests"))
+
+
+
+@app.route("/materials-shortage/<int:item_id>/create-request", methods=["POST"])
+@permission_required("manage_procurement")
+def create_request_from_shortage(item_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            item_name,
+            measurement_unit,
+            supplier_id,
+            COALESCE(stock_quantity, 0),
+            COALESCE(min_stock, 0)
+        FROM items
+        WHERE id = ?
+          AND company_id = ?
+    """, (item_id, company_id))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("Item not found.", "error")
+        return redirect(url_for("materials_shortage"))
+
+    stock_quantity = float(row[4] or 0)
+    min_stock = float(row[5] or 0)
+    required_to_order = max(0, min_stock - stock_quantity)
+
+    if required_to_order <= 0:
+        conn.close()
+        flash("This item is no longer below minimum stock.", "info")
+        return redirect(url_for("materials_shortage"))
+
+    cursor.execute("""
+        INSERT INTO purchase_requests (
+            company_id,
+            request_number,
+            item_id,
+            supplier_id,
+            title,
+            description,
+            quantity,
+            unit,
+            status,
+            priority,
+            needed_by,
+            requested_by,
+            approved_by,
+            ordered_by,
+            notes,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    """, (
+        company_id,
+        None,
+        row[0],
+        row[3],
+        row[1],
+        f"Auto-created from shortage. Current stock: {stock_quantity:g}, minimum stock: {min_stock:g}.",
+        required_to_order,
+        row[2] or "",
+        "draft",
+        "high",
+        None,
+        user_id,
+        None,
+        None,
+        "Created from shortage screen."
+    ))
+
+    new_request_id = cursor.lastrowid
+    request_number = f"PR-{new_request_id:05d}"
+
+    cursor.execute("""
+        UPDATE purchase_requests
+        SET request_number = ?
+        WHERE id = ?
+          AND company_id = ?
+    """, (request_number, new_request_id, company_id))
+
+    conn.commit()
+    conn.close()
+
+    flash("Purchase request created from shortage.", "success")
+    return redirect(url_for("purchase_requests"))
+
+
+
+
+
+@app.route("/dashboard/save-layout", methods=["POST"])
+def save_dashboard_layout():
+    if not is_logged_in():
+        return {"ok": False, "error": "Unauthorized"}, 401
+
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+
+    data = request.get_json(silent=True) or {}
+    layout = data.get("layout", [])
+
+    if not isinstance(layout, list):
+        return {"ok": False, "error": "Invalid payload"}, 400
+
+    clean_layout = []
+
+    for item in layout:
+        if not isinstance(item, dict):
+            continue
+
+        widget_id = str(item.get("id", "")).strip()
+        if not widget_id:
+            continue
+
+        try:
+            x = float(item.get("x", 0))
+            y = float(item.get("y", 0))
+            w = float(item.get("w", 320))
+            h = float(item.get("h", 180))
+        except (TypeError, ValueError):
+            continue
+
+        clean_layout.append({
+            "id": widget_id,
+            "x": max(0, x),
+            "y": max(0, y),
+            "w": max(240, w),
+            "h": max(100, h)
+        })
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    save_dashboard_layout_record(cursor, user_id, company_id, clean_layout, "dashboard")
+
+    conn.commit()
+    conn.close()
+
+    return {"ok": True}
+
 
 
 if __name__ == "__main__":
