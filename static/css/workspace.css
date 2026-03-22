@@ -7088,3 +7088,74 @@ textarea::placeholder {
         width: 100%;
     }
 }
+/* FILTER TOGGLE */
+.filters-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.filters-toggle-btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-soft);
+    font-weight: 700;
+    font-size: 0.8rem;
+    transition: 0.2s ease;
+}
+
+.filters-toggle-btn:hover {
+    border-color: var(--border-strong);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+}
+
+.filters-panel {
+    overflow: hidden;
+    transition: max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease, margin 0.22s ease;
+}
+
+.filters-panel.filters-collapsed {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    margin-bottom: 0;
+}
+
+.filters-panel.filters-open {
+    max-height: 1200px;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+@media (max-width: 700px) {
+    .filters-toggle-btn {
+        width: 100%;
+    }
+}
+.planner-job-bar.is-dragging,
+.planner-unscheduled-card.is-dragging {
+    opacity: 0.55;
+    transform: scale(0.98);
+}
+
+.planner-is-saving .planner-day-slot,
+.planner-is-saving .planner-job-bar,
+.planner-is-saving .planner-unscheduled-card {
+    pointer-events: none;
+}
+
+.planner-is-saving .planner-month-shell,
+.planner-is-saving .planner-backlog-card {
+    opacity: 0.82;
+    transition: opacity 0.18s ease;
+}
