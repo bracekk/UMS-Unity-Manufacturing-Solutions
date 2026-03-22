@@ -15,9 +15,9 @@
   </div>
 </div>
 
-<div class="dashboard-form-card product-form-card">
-  <form method="POST" class="order-form">
-    <div class="form-grid form-grid-2">
+<div class="dashboard-form-card product-form-card product-form-shell">
+  <form method="POST" class="order-form product-clean-form">
+    <div class="form-grid form-grid-2 product-form-grid">
       <div class="form-group floating-group">
         <input
           type="text"
@@ -42,19 +42,19 @@
         <label for="product_name">Product Name</label>
       </div>
 
-      <div class="form-group">
+      <div class="form-group product-select-group">
         <label>Measurement Unit</label>
 
         <div class="custom-select" data-name="measurement_unit">
-          <div class="custom-select-trigger" tabindex="0">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select measurement unit">
             <span>{{ product.measurement_unit }}</span>
           </div>
 
           <div class="custom-options">
-            <div class="custom-option" data-value="pcs">pcs</div>
-            <div class="custom-option" data-value="m">m</div>
-            <div class="custom-option" data-value="m2">m2</div>
-            <div class="custom-option" data-value="liter">liter</div>
+            <div class="custom-option {% if product.measurement_unit == 'pcs' %}selected{% endif %}" data-value="pcs">pcs</div>
+            <div class="custom-option {% if product.measurement_unit == 'm' %}selected{% endif %}" data-value="m">m</div>
+            <div class="custom-option {% if product.measurement_unit == 'm2' %}selected{% endif %}" data-value="m2">m2</div>
+            <div class="custom-option {% if product.measurement_unit == 'liter' %}selected{% endif %}" data-value="liter">liter</div>
           </div>
 
           <input type="hidden" name="measurement_unit" value="{{ product.measurement_unit }}">
@@ -88,7 +88,7 @@
         <label for="stock_quantity">Stock Quantity</label>
       </div>
 
-      <div class="form-group form-group-full floating-group">
+      <div class="form-group form-group-full floating-group product-description-group">
         <textarea
           id="description"
           name="description"
@@ -99,7 +99,7 @@
       </div>
     </div>
 
-    <div class="form-actions">
+    <div class="form-actions product-form-actions">
       <a href="{{ url_for('products') }}" class="dashboard-btn secondary">Cancel</a>
       <button type="submit" class="dashboard-btn primary">Update Product</button>
     </div>
