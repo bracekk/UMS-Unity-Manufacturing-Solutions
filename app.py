@@ -38,6 +38,29 @@ def init_db():
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS production_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER NOT NULL,
+        job_id INTEGER NOT NULL,
+        order_id INTEGER,
+        product_id INTEGER,
+        workstation_id INTEGER,
+        report_type TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        reported_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id),
+        FOREIGN KEY (job_id) REFERENCES order_jobs(id),
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (workstation_id) REFERENCES workstations(id),
+        FOREIGN KEY (reported_by) REFERENCES users(id)
+    )
+    """)
+
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         order_number TEXT,
@@ -269,7 +292,14 @@ def init_db():
         "ALTER TABLE order_jobs ADD COLUMN is_split_child INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE order_jobs ADD COLUMN company_id INTEGER",
         "ALTER TABLE items ADD COLUMN supplier_id INTEGER",
+        "ALTER TABLE production_reports ADD COLUMN unit TEXT DEFAULT 'pcs'",
     ]
+
+    
+    try:
+        cursor.execute("ALTER TABLE production_reports ADD COLUMN unit TEXT DEFAULT 'pcs'")
+    except sqlite3.OperationalError:
+        pass
 
     for sql in alter_statements:
         try:
@@ -880,6 +910,59 @@ def rebuild_order_jobs(cursor, order_id, root_product_id, root_quantity, planned
         planned_date,
         company_id=company_id
     )
+
+def get_active_jobs_for_reports(cursor, company_id):
+    cursor.execute("""
+        SELECT
+            oj.id,
+            o.order_number,
+            COALESCE(p.product_name, '-') AS product_name,
+            oj.job_name,
+            COALESCE(w.name, '-') AS workstation_name,
+            oj.status,
+            oj.planned_quantity,
+            oj.completed_quantity
+        FROM order_jobs oj
+        JOIN orders o
+          ON oj.order_id = o.id
+         AND o.company_id = oj.company_id
+        LEFT JOIN products p
+          ON oj.job_product_id = p.id
+         AND p.company_id = oj.company_id
+        LEFT JOIN workstations w
+          ON oj.workstation_id = w.id
+         AND w.company_id = oj.company_id
+        WHERE oj.company_id = ?
+          AND oj.status IN ('Waiting', 'Ongoing', 'Paused', 'Delayed')
+          AND (
+                oj.is_split_child = 1
+                OR NOT EXISTS (
+                    SELECT 1
+                    FROM order_jobs child
+                    WHERE child.parent_job_id = oj.id
+                      AND child.is_split_child = 1
+                      AND child.company_id = oj.company_id
+                )
+          )
+        ORDER BY o.order_number ASC, oj.sequence ASC, oj.id ASC
+    """, (company_id,))
+
+    rows = cursor.fetchall()
+
+    active_jobs = []
+    for row in rows:
+        active_jobs.append({
+            "id": row[0],
+            "order_number": row[1],
+            "product_name": row[2],
+            "job_name": row[3],
+            "workstation_name": row[4],
+            "status": row[5],
+            "planned_quantity": float(row[6] or 0),
+            "completed_quantity": float(row[7] or 0),
+        })
+
+    return active_jobs
 
 def explode_bom_items_recursive(cursor, product_id, required_quantity, collected=None, path=None, company_id=None):
     if collected is None:
@@ -5592,6 +5675,247 @@ def save_dashboard_layout():
 
     return {"ok": True}
 
+
+
+
+@app.route("/reports")
+@permission_required("view_reports")
+def reports():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+
+    report_type = request.args.get("report_type", "").strip()
+    job_search = request.args.get("job_search", "").strip()
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    query = """
+        SELECT
+            pr.id,
+            pr.report_type,
+            pr.quantity,
+            COALESCE(pr.unit, 'pcs') AS unit,
+            pr.notes,
+            pr.created_at,
+            oj.id,
+            oj.job_name,
+            oj.status,
+            o.order_number,
+            COALESCE(p.product_name, '-') AS product_name,
+            COALESCE(w.name, '-') AS workstation_name,
+            COALESCE(u.full_name, 'System') AS reported_by_name
+        FROM production_reports pr
+        JOIN order_jobs oj
+          ON pr.job_id = oj.id
+         AND oj.company_id = pr.company_id
+        LEFT JOIN orders o
+          ON pr.order_id = o.id
+         AND o.company_id = pr.company_id
+        LEFT JOIN products p
+          ON pr.product_id = p.id
+         AND p.company_id = pr.company_id
+        LEFT JOIN workstations w
+          ON pr.workstation_id = w.id
+         AND w.company_id = pr.company_id
+        LEFT JOIN users u
+          ON pr.reported_by = u.id
+        WHERE pr.company_id = ?
+    """
+    params = [company_id]
+
+    if report_type:
+        query += " AND pr.report_type = ?"
+        params.append(report_type)
+
+    if job_search:
+        query += """
+          AND (
+                o.order_number LIKE ?
+                OR oj.job_name LIKE ?
+                OR p.product_name LIKE ?
+                OR w.name LIKE ?
+          )
+        """
+        like_value = f"%{job_search}%"
+        params.extend([like_value, like_value, like_value, like_value])
+
+    query += " ORDER BY pr.created_at DESC, pr.id DESC"
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    reports = []
+    total_scrap = 0
+    total_waste = 0
+    total_defect = 0
+
+    for row in rows:
+        report = {
+            "id": row[0],
+            "report_type": row[1],
+            "quantity": float(row[2] or 0),
+            "unit": row[3] or "pcs",
+            "notes": row[4],
+            "created_at": row[5],
+            "job_id": row[6],
+            "job_name": row[7],
+            "job_status": row[8],
+            "order_number": row[9],
+            "product_name": row[10],
+            "workstation_name": row[11],
+            "reported_by_name": row[12]
+        }
+        reports.append(report)
+
+        if report["report_type"] == "scrap":
+            total_scrap += report["quantity"]
+        elif report["report_type"] == "waste":
+            total_waste += report["quantity"]
+        elif report["report_type"] == "defect":
+            total_defect += report["quantity"]
+
+    conn.close()
+
+    return render_template(
+        "reports.html",
+        reports=reports,
+        total_scrap=total_scrap,
+        total_waste=total_waste,
+        total_defect=total_defect,
+        filters={
+            "report_type": report_type,
+            "job_search": job_search
+        },
+        active_page="reports"
+    )
+
+
+@app.route("/reports/new", methods=["GET", "POST"])
+@permission_required("view_reports")
+def new_report():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    company_id = get_company_id()
+    user_id = session.get("user_id")
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        job_id_raw = request.form.get("job_id", "").strip()
+        report_type = request.form.get("report_type", "").strip().lower()
+        quantity_raw = request.form.get("quantity", "").strip()
+        unit_raw = request.form.get("unit", "").strip()
+        custom_unit_raw = request.form.get("custom_unit", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not job_id_raw or not report_type or not quantity_raw:
+            conn.close()
+            flash("Job, report type and quantity are required.", "error")
+            return redirect(url_for("new_report"))
+
+        if report_type not in {"scrap", "waste", "defect", "note"}:
+            conn.close()
+            flash("Invalid report type.", "error")
+            return redirect(url_for("new_report"))
+
+        try:
+            job_id = int(job_id_raw)
+            quantity = float(quantity_raw)
+        except ValueError:
+            conn.close()
+            flash("Invalid job or quantity.", "error")
+            return redirect(url_for("new_report"))
+
+        if quantity < 0:
+            conn.close()
+            flash("Quantity cannot be negative.", "error")
+            return redirect(url_for("new_report"))
+
+        unit = unit_raw or "pcs"
+        if unit == "custom":
+            unit = custom_unit_raw.strip()
+
+        if not unit:
+            unit = "pcs"
+
+        cursor.execute("""
+            SELECT
+                oj.id,
+                oj.order_id,
+                oj.job_product_id,
+                oj.workstation_id,
+                oj.status
+            FROM order_jobs oj
+            WHERE oj.id = ?
+              AND oj.company_id = ?
+        """, (job_id, company_id))
+        job_row = cursor.fetchone()
+
+        if job_row is None:
+            conn.close()
+            flash("Selected job not found.", "error")
+            return redirect(url_for("new_report"))
+
+        if job_row[4] not in ("Waiting", "Ongoing", "Paused", "Delayed"):
+            conn.close()
+            flash("Reports can only be created for active jobs.", "error")
+            return redirect(url_for("new_report"))
+
+        cursor.execute("""
+            INSERT INTO production_reports (
+                company_id,
+                job_id,
+                order_id,
+                product_id,
+                workstation_id,
+                report_type,
+                quantity,
+                unit,
+                notes,
+                reported_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            company_id,
+            job_row[0],
+            job_row[1],
+            job_row[2],
+            job_row[3],
+            report_type,
+            quantity,
+            unit,
+            notes,
+            user_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Production report created successfully.", "success")
+        return redirect(url_for("reports"))
+
+    active_jobs = get_active_jobs_for_reports(cursor, company_id)
+    conn.close()
+
+    return render_template(
+        "new_report.html",
+        active_jobs=active_jobs,
+        active_page="reports"
+    )
+
+
+@app.route("/reports/new/<int:job_id>")
+@permission_required("view_reports")
+def new_report_for_job(job_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    return redirect(url_for("new_report", job_id=job_id))
 
 
 if __name__ == "__main__":
