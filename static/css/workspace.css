@@ -7159,3 +7159,205 @@ textarea::placeholder {
     opacity: 0.82;
     transition: opacity 0.18s ease;
 }
+
+.reports-table th:last-child,
+.reports-table td:last-child {
+    width: 260px;
+}
+
+.reports-table td {
+    vertical-align: middle;
+}
+
+.sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+        linear-gradient(180deg, #070c18 0%, #091122 100%);
+    border-right: 1px solid var(--border);
+    padding: 12px 14px 14px 14px;
+
+    display: flex;
+    flex-direction: column;
+
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.sidebar-logo {
+    padding: 10px 18px 8px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    margin-bottom: 8px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+    padding-left: 6px;
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+.sidebar-logo {
+    padding: 10px 18px 8px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    margin-bottom: 8px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+    padding-left: 6px;
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+.sidebar-section-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    font-weight: 700;
+    padding: 10px 12px 6px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+.sidebar-section-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    font-weight: 700;
+    padding: 10px 12px 6px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+.sidebar-nav a::before,
+.sidebar-footer a::before {
+    content: "";
+    width: 20px;
+    height: 20px;
+    border-radius: 7px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+    flex: 0 0 20px;
+}
+.custom-select {
+    position: relative;
+    width: 100%;
+    user-select: none;
+    z-index: 20;
+}
+
+.custom-select-trigger {
+    min-height: 48px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.custom-select-trigger span {
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-select-trigger::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid rgba(238, 244, 255, 0.8);
+    border-bottom: 2px solid rgba(238, 244, 255, 0.8);
+    transform: rotate(45deg);
+    margin-top: -4px;
+    flex-shrink: 0;
+}
+
+.custom-select.open .custom-select-trigger {
+    border-color: rgba(79, 140, 255, 0.45);
+    box-shadow: 0 0 0 4px rgba(79, 140, 255, 0.12);
+}
+
+.custom-select-trigger.is-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.custom-options {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    display: none;
+    padding: 8px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(11, 22, 40, 0.98);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.custom-select.open .custom-options {
+    display: block;
+}
+
+.custom-option {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--text-soft);
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease;
+    line-height: 1.4;
+}
+
+.custom-option:hover {
+    background: rgba(79, 140, 255, 0.12);
+    color: #fff;
+}
+
+.custom-option.selected {
+    background: rgba(79, 140, 255, 0.22);
+    color: #fff;
+}
+.reports-table th:nth-child(6),
+.reports-table td:nth-child(6) {
+    width: 140px;
+    white-space: nowrap;
+}
