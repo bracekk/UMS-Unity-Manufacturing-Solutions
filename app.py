@@ -5,12 +5,19 @@ import calendar
 import math
 import os
 import json
-
+import secrets
+import hashlib
+from email.message import EmailMessage
+import smtplib
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
+import resend
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-change-me")
 
+
+load_dotenv()
 
 def init_db():
     conn = sqlite3.connect("database.db")
@@ -36,6 +43,19 @@ def init_db():
         FOREIGN KEY (company_id) REFERENCES companies(id)
     )
     """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+    """)
+
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS production_reports (
@@ -963,6 +983,39 @@ def get_active_jobs_for_reports(cursor, company_id):
         })
 
     return active_jobs
+
+
+def hash_reset_token(raw_token):
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def build_reset_link(raw_token):
+    base_url = os.environ.get("APP_BASE_URL", "").strip()
+
+    if base_url:
+        return f"{base_url.rstrip('/')}{url_for('reset_password', token=raw_token)}"
+
+    return url_for("reset_password", token=raw_token, _external=True)
+
+
+import resend
+
+resend.api_key = os.environ.get("RESEND_API_KEY")
+
+
+def send_password_reset_email(recipient_email, reset_link):
+    resend.Emails.send({
+        "from": "UMS <onboarding@resend.dev>",
+        "to": recipient_email,
+        "subject": "Reset your UMS password",
+        "html": f"""
+        <h2>Reset your password</h2>
+        <p>Click below:</p>
+        <a href="{reset_link}">Reset Password</a>
+        <p>Expires in 45 minutes.</p>
+        """
+    })
+
 
 def explode_bom_items_recursive(cursor, product_id, required_quantity, collected=None, path=None, company_id=None):
     if collected is None:
@@ -5916,6 +5969,145 @@ def new_report_for_job(job_id):
         return redirect(url_for("login"))
 
     return redirect(url_for("new_report", job_id=job_id))
+
+
+
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+
+        if not email:
+            flash("Email is required.", "error")
+            return render_template("forgot_password.html")
+
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, email
+            FROM users
+            WHERE LOWER(email) = ?
+            LIMIT 1
+        """, (email,))
+        user_row = cursor.fetchone()
+
+        # Svarbu: neatskleidžiam ar email egzistuoja
+        if user_row:
+            user_id = user_row[0]
+            user_email = user_row[1]
+
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = hash_reset_token(raw_token)
+            expires_at = (datetime.utcnow() + timedelta(minutes=45)).isoformat()
+
+            cursor.execute("""
+                INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+            """, (user_id, token_hash, expires_at))
+
+            conn.commit()
+
+            reset_link = build_reset_link(raw_token)
+
+            try:
+                send_password_reset_email(user_email, reset_link)
+            except Exception as e:
+                conn.rollback()
+                conn.close()
+                print(f"[SMTP ERROR] {e}")
+                flash("Failed to send reset email. Please try again later.", "error")
+                return redirect(url_for("forgot_password"))
+
+        conn.close()
+
+        flash("If that email exists, a password reset link has been sent.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html")
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    token_hash = hash_reset_token(token)
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.email
+        FROM password_reset_tokens prt
+        JOIN users u ON prt.user_id = u.id
+        WHERE prt.token_hash = ?
+        LIMIT 1
+    """, (token_hash,))
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        flash("Invalid or expired reset link.", "error")
+        return redirect(url_for("login"))
+
+    token_id, user_id, expires_at, used_at, user_email = row
+
+    if used_at:
+        conn.close()
+        flash("This reset link has already been used.", "error")
+        return redirect(url_for("login"))
+
+    try:
+        expires_dt = datetime.fromisoformat(expires_at)
+    except ValueError:
+        conn.close()
+        flash("Invalid or expired reset link.", "error")
+        return redirect(url_for("login"))
+
+    if datetime.utcnow() > expires_dt:
+        conn.close()
+        flash("This reset link has expired.", "error")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not password or not confirm_password:
+            conn.close()
+            flash("Both password fields are required.", "error")
+            return render_template("reset_password.html", token=token, email=user_email)
+
+        if password != confirm_password:
+            conn.close()
+            flash("Passwords do not match.", "error")
+            return render_template("reset_password.html", token=token, email=user_email)
+
+        if len(password) < 6:
+            conn.close()
+            flash("Password must be at least 6 characters.", "error")
+            return render_template("reset_password.html", token=token, email=user_email)
+
+        new_password_hash = generate_password_hash(password)
+
+        cursor.execute("""
+            UPDATE users
+            SET password = ?
+            WHERE id = ?
+        """, (new_password_hash, user_id))
+
+        cursor.execute("""
+            UPDATE password_reset_tokens
+            SET used_at = ?
+            WHERE id = ?
+        """, (datetime.utcnow().isoformat(), token_id))
+
+        conn.commit()
+        conn.close()
+
+        flash("Password reset successfully. You can now log in.", "success")
+        return redirect(url_for("login"))
+
+    conn.close()
+    return render_template("reset_password.html", token=token, email=user_email)
 
 
 if __name__ == "__main__":
