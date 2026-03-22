@@ -15,47 +15,93 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing product-form-card">
-  <form method="POST" action="{{ url_for('add_bom_item', product_id=product.id) }}" class="order-form">
-    <div class="form-grid form-grid-4">
-      <div class="form-group">
-        <label for="component_type">Component Type</label>
-        <select id="component_type" name="component_type" required onchange="toggleBomComponentType()">
-          <option value="item">Item</option>
-          <option value="product">Product</option>
-        </select>
+<div class="dashboard-form-card section-spacing product-form-card bom-form-shell">
+  <form method="POST" action="{{ url_for('add_bom_item', product_id=product.id) }}" class="order-form bom-clean-form">
+    <div class="form-grid form-grid-4 bom-form-grid">
+      <div class="form-group bom-select-group">
+        <label>Component Type</label>
+
+        <div class="custom-select" data-name="component_type" id="component-type-select">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select component type">
+            <span>Item</span>
+          </div>
+
+          <div class="custom-options">
+            <div class="custom-option selected" data-value="item">Item</div>
+            <div class="custom-option" data-value="product">Product</div>
+          </div>
+
+          <input type="hidden" id="component_type" name="component_type" value="item">
+        </div>
       </div>
 
-      <div class="form-group" id="item-select-group">
-        <label for="item_id">Item</label>
-        <select id="item_id" name="item_id">
-          {% for item in items %}
-            <option value="{{ item.id }}">
-              {{ item.item_code }} - {{ item.item_name }} ({{ item.measurement_unit }})
-            </option>
-          {% endfor %}
-        </select>
+      <div class="form-group bom-select-group" id="item-select-group">
+        <label>Item</label>
+
+        {% if items %}
+          <div class="custom-select" data-name="item_id">
+            <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select item">
+              <span>{{ items[0].item_code }} - {{ items[0].item_name }} ({{ items[0].measurement_unit }})</span>
+            </div>
+
+            <div class="custom-options">
+              {% for item in items %}
+                <div class="custom-option {% if loop.first %}selected{% endif %}" data-value="{{ item.id }}">
+                  {{ item.item_code }} - {{ item.item_name }} ({{ item.measurement_unit }})
+                </div>
+              {% endfor %}
+            </div>
+
+            <input type="hidden" id="item_id" name="item_id" value="{{ items[0].id }}" required>
+          </div>
+        {% else %}
+          <div class="custom-select">
+            <div class="custom-select-trigger is-disabled" aria-disabled="true">
+              <span>No items available</span>
+            </div>
+            <input type="hidden" id="item_id" name="item_id" value="" disabled>
+          </div>
+        {% endif %}
       </div>
 
-      <div class="form-group" id="product-select-group" style="display:none;">
-        <label for="child_product_id">Product</label>
-        <select id="child_product_id" name="child_product_id">
-          {% for child_product in child_products %}
-            <option value="{{ child_product.id }}">
-              {{ child_product.product_code }} - {{ child_product.product_name }} ({{ child_product.measurement_unit }})
-            </option>
-          {% endfor %}
-        </select>
+      <div class="form-group bom-select-group" id="product-select-group" style="display:none;">
+        <label>Product</label>
+
+        {% if child_products %}
+          <div class="custom-select" data-name="child_product_id">
+            <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select product">
+              <span>{{ child_products[0].product_code }} - {{ child_products[0].product_name }} ({{ child_products[0].measurement_unit }})</span>
+            </div>
+
+            <div class="custom-options">
+              {% for child_product in child_products %}
+                <div class="custom-option {% if loop.first %}selected{% endif %}" data-value="{{ child_product.id }}">
+                  {{ child_product.product_code }} - {{ child_product.product_name }} ({{ child_product.measurement_unit }})
+                </div>
+              {% endfor %}
+            </div>
+
+            <input type="hidden" id="child_product_id" name="child_product_id" value="{{ child_products[0].id }}">
+          </div>
+        {% else %}
+          <div class="custom-select">
+            <div class="custom-select-trigger is-disabled" aria-disabled="true">
+              <span>No products available</span>
+            </div>
+            <input type="hidden" id="child_product_id" name="child_product_id" value="" disabled>
+          </div>
+        {% endif %}
       </div>
 
-      <div class="form-group">
-        <label for="quantity">Quantity</label>
+      <div class="form-group bom-quantity-group">
+        <label for="quantity" class="bom-field-label">Quantity</label>
         <input type="number" step="0.01" id="quantity" name="quantity" required>
       </div>
-    </div>
 
-    <div class="form-actions">
-      <button type="submit" class="dashboard-btn primary">Add BOM Component</button>
+      <div class="form-group bom-submit-group">
+        <label class="bom-submit-label">Action</label>
+        <button type="submit" class="dashboard-btn primary bom-submit-btn">Add BOM Component</button>
+      </div>
     </div>
   </form>
 </div>
@@ -119,25 +165,54 @@
 
 <script>
 function toggleBomComponentType() {
-  const componentType = document.getElementById("component_type").value;
+  const componentTypeInput = document.getElementById("component_type");
   const itemGroup = document.getElementById("item-select-group");
   const productGroup = document.getElementById("product-select-group");
-  const itemSelect = document.getElementById("item_id");
-  const productSelect = document.getElementById("child_product_id");
+  const itemInput = document.getElementById("item_id");
+  const productInput = document.getElementById("child_product_id");
+
+  if (!componentTypeInput || !itemGroup || !productGroup) return;
+
+  const componentType = componentTypeInput.value;
 
   if (componentType === "product") {
     itemGroup.style.display = "none";
-    productGroup.style.display = "block";
-    itemSelect.removeAttribute("required");
-    productSelect.setAttribute("required", "required");
+    productGroup.style.display = "";
+    if (itemInput) {
+      itemInput.removeAttribute("required");
+      itemInput.disabled = true;
+    }
+    if (productInput) {
+      productInput.setAttribute("required", "required");
+      productInput.disabled = false;
+    }
   } else {
-    itemGroup.style.display = "block";
+    itemGroup.style.display = "";
     productGroup.style.display = "none";
-    productSelect.removeAttribute("required");
-    itemSelect.setAttribute("required", "required");
+    if (productInput) {
+      productInput.removeAttribute("required");
+      productInput.disabled = true;
+    }
+    if (itemInput) {
+      itemInput.setAttribute("required", "required");
+      itemInput.disabled = false;
+    }
   }
 }
 
-document.addEventListener("DOMContentLoaded", toggleBomComponentType);
+document.addEventListener("DOMContentLoaded", function () {
+  toggleBomComponentType();
+
+  const componentTypeInput = document.getElementById("component_type");
+  if (componentTypeInput) {
+    componentTypeInput.addEventListener("change", toggleBomComponentType);
+  }
+
+  document.querySelectorAll('#component-type-select .custom-option').forEach(option => {
+    option.addEventListener("click", function () {
+      setTimeout(toggleBomComponentType, 0);
+    });
+  });
+});
 </script>
 {% endblock %}
