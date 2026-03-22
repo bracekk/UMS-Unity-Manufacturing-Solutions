@@ -8,7 +8,7 @@
 </head>
 <body class="auth-body">
   <div class="auth-page">
-    <div class="auth-shell auth-shell-compact">
+    <div class="auth-shell auth-shell-compact auth-shell-login">
       <a href="{{ url_for('home') }}" class="auth-logo">
         <span class="auth-logo-u">U</span><span class="auth-logo-m">M</span><span class="auth-logo-s">S</span>
       </a>
@@ -47,7 +47,10 @@
         </div>
 
         <div class="auth-field">
-          <label for="password">Password</label>
+          <div class="auth-label-row">
+            <label for="password">Password</label>
+            <a href="{{ url_for('forgot_password') }}" class="auth-inline-link">Forgot password?</a>
+          </div>
           <input
             type="password"
             id="password"
@@ -61,6 +64,10 @@
         <button type="submit" class="auth-btn auth-btn-primary">Login</button>
       </form>
 
+      <div class="auth-divider">
+        <span>New to UMS?</span>
+      </div>
+
       <p class="auth-footer-text">
         Don’t have an account?
         <a href="{{ url_for('register') }}">Create account</a>
@@ -69,5 +76,7 @@
       <a href="{{ url_for('home') }}" class="auth-back-link">Back to landing page</a>
     </div>
   </div>
+
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
 </body>
 </html>
