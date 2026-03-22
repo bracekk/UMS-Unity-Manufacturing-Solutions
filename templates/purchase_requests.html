@@ -73,106 +73,114 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing">
-  <div class="card-header">
-    <div>
-      <span class="card-kicker">Filters</span>
-      <h4>Request Queue Filters</h4>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    Filters
+  </button>
+
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card">
+      <div class="card-header">
+        <div>
+          <span class="card-kicker">Filters</span>
+          <h4>Request Queue Filters</h4>
+        </div>
+      </div>
+
+      <form method="GET" class="order-form procurement-request-clean-form">
+        <input type="hidden" name="show_history" value="{% if show_history %}1{% else %}0{% endif %}">
+        <input type="hidden" name="history_search" value="{{ history_search }}">
+        <input type="hidden" name="history_status" value="{{ history_status_filter }}">
+        <input type="hidden" name="history_priority" value="{{ history_priority_filter }}">
+        <input type="hidden" name="history_supplier_id" value="{{ history_supplier_filter }}">
+
+        <div class="form-grid procurement-request-grid">
+          <div class="form-group">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" value="{{ search }}">
+          </div>
+
+          <div class="form-group">
+            <label for="status">Status</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="status" id="status" value="{{ status_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% if status_filter == "draft" %}Draft
+                  {% elif status_filter == "submitted" %}Submitted
+                  {% elif status_filter == "approved" %}Approved
+                  {% elif status_filter == "ordered" %}Ordered
+                  {% else %}All Active Statuses{% endif %}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not status_filter %}selected{% endif %}" data-value="">All Active Statuses</div>
+                <div class="custom-option {% if status_filter == 'draft' %}selected{% endif %}" data-value="draft">Draft</div>
+                <div class="custom-option {% if status_filter == 'submitted' %}selected{% endif %}" data-value="submitted">Submitted</div>
+                <div class="custom-option {% if status_filter == 'approved' %}selected{% endif %}" data-value="approved">Approved</div>
+                <div class="custom-option {% if status_filter == 'ordered' %}selected{% endif %}" data-value="ordered">Ordered</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="priority">Priority</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="priority" id="priority" value="{{ priority_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% if priority_filter == "low" %}Low
+                  {% elif priority_filter == "normal" %}Normal
+                  {% elif priority_filter == "high" %}High
+                  {% else %}All Priorities{% endif %}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not priority_filter %}selected{% endif %}" data-value="">All Priorities</div>
+                <div class="custom-option {% if priority_filter == 'low' %}selected{% endif %}" data-value="low">Low</div>
+                <div class="custom-option {% if priority_filter == 'normal' %}selected{% endif %}" data-value="normal">Normal</div>
+                <div class="custom-option {% if priority_filter == 'high' %}selected{% endif %}" data-value="high">High</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="supplier_id">Supplier</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="supplier_id" id="supplier_id" value="{{ supplier_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% set supplier_label = namespace(name='All Suppliers') %}
+                  {% for supplier in supplier_options %}
+                    {% if supplier_filter and supplier_filter|int == supplier[0] %}
+                      {% set supplier_label.name = supplier[1] %}
+                    {% endif %}
+                  {% endfor %}
+                  {{ supplier_label.name }}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not supplier_filter %}selected{% endif %}" data-value="">All Suppliers</div>
+                {% for supplier in supplier_options %}
+                  <div class="custom-option {% if supplier_filter and supplier_filter|int == supplier[0] %}selected{% endif %}" data-value="{{ supplier[0] }}">
+                    {{ supplier[1] }}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions procurement-form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply Filters</button>
+          <a href="{{ url_for('purchase_requests') }}" class="dashboard-btn secondary">Reset</a>
+        </div>
+      </form>
     </div>
   </div>
-
-  <form method="GET" class="order-form procurement-request-clean-form">
-    <input type="hidden" name="show_history" value="{% if show_history %}1{% else %}0{% endif %}">
-    <input type="hidden" name="history_search" value="{{ history_search }}">
-    <input type="hidden" name="history_status" value="{{ history_status_filter }}">
-    <input type="hidden" name="history_priority" value="{{ history_priority_filter }}">
-    <input type="hidden" name="history_supplier_id" value="{{ history_supplier_filter }}">
-
-    <div class="form-grid procurement-request-grid">
-      <div class="form-group">
-        <label for="search">Search</label>
-        <input type="text" id="search" name="search" value="{{ search }}">
-      </div>
-
-      <div class="form-group">
-        <label for="status">Status</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="status" id="status" value="{{ status_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% if status_filter == "draft" %}Draft
-              {% elif status_filter == "submitted" %}Submitted
-              {% elif status_filter == "approved" %}Approved
-              {% elif status_filter == "ordered" %}Ordered
-              {% else %}All Active Statuses{% endif %}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not status_filter %}selected{% endif %}" data-value="">All Active Statuses</div>
-            <div class="custom-option {% if status_filter == 'draft' %}selected{% endif %}" data-value="draft">Draft</div>
-            <div class="custom-option {% if status_filter == 'submitted' %}selected{% endif %}" data-value="submitted">Submitted</div>
-            <div class="custom-option {% if status_filter == 'approved' %}selected{% endif %}" data-value="approved">Approved</div>
-            <div class="custom-option {% if status_filter == 'ordered' %}selected{% endif %}" data-value="ordered">Ordered</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="priority">Priority</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="priority" id="priority" value="{{ priority_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% if priority_filter == "low" %}Low
-              {% elif priority_filter == "normal" %}Normal
-              {% elif priority_filter == "high" %}High
-              {% else %}All Priorities{% endif %}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not priority_filter %}selected{% endif %}" data-value="">All Priorities</div>
-            <div class="custom-option {% if priority_filter == 'low' %}selected{% endif %}" data-value="low">Low</div>
-            <div class="custom-option {% if priority_filter == 'normal' %}selected{% endif %}" data-value="normal">Normal</div>
-            <div class="custom-option {% if priority_filter == 'high' %}selected{% endif %}" data-value="high">High</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="supplier_id">Supplier</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="supplier_id" id="supplier_id" value="{{ supplier_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% set supplier_label = namespace(name='All Suppliers') %}
-              {% for supplier in supplier_options %}
-                {% if supplier_filter and supplier_filter|int == supplier[0] %}
-                  {% set supplier_label.name = supplier[1] %}
-                {% endif %}
-              {% endfor %}
-              {{ supplier_label.name }}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not supplier_filter %}selected{% endif %}" data-value="">All Suppliers</div>
-            {% for supplier in supplier_options %}
-              <div class="custom-option {% if supplier_filter and supplier_filter|int == supplier[0] %}selected{% endif %}" data-value="{{ supplier[0] }}">
-                {{ supplier[1] }}
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-actions procurement-form-actions">
-      <button type="submit" class="dashboard-btn primary">Apply Filters</button>
-      <a href="{{ url_for('purchase_requests') }}" class="dashboard-btn secondary">Reset</a>
-    </div>
-  </form>
 </div>
 
 <div class="dashboard-table-card section-spacing">
@@ -292,104 +300,112 @@
 </div>
 
 {% if show_history %}
-<div class="dashboard-form-card section-spacing">
-  <div class="card-header">
-    <div>
-      <span class="card-kicker">Archive Filters</span>
-      <h4>Request History Filters</h4>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    History Filters
+  </button>
+
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card">
+      <div class="card-header">
+        <div>
+          <span class="card-kicker">Archive Filters</span>
+          <h4>Request History Filters</h4>
+        </div>
+      </div>
+
+      <form method="GET" class="order-form procurement-request-clean-form">
+        <input type="hidden" name="show_history" value="1">
+        <input type="hidden" name="search" value="{{ search }}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="hidden" name="priority" value="{{ priority_filter }}">
+        <input type="hidden" name="supplier_id" value="{{ supplier_filter }}">
+
+        <div class="form-grid procurement-request-grid">
+          <div class="form-group">
+            <label for="history_search">Search</label>
+            <input type="text" id="history_search" name="history_search" value="{{ history_search }}">
+          </div>
+
+          <div class="form-group">
+            <label for="history_status">Status</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="history_status" id="history_status" value="{{ history_status_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% if history_status_filter == "received" %}Received
+                  {% elif history_status_filter == "cancelled" %}Cancelled
+                  {% elif history_status_filter == "rejected" %}Rejected
+                  {% else %}All History Statuses{% endif %}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not history_status_filter %}selected{% endif %}" data-value="">All History Statuses</div>
+                <div class="custom-option {% if history_status_filter == 'received' %}selected{% endif %}" data-value="received">Received</div>
+                <div class="custom-option {% if history_status_filter == 'cancelled' %}selected{% endif %}" data-value="cancelled">Cancelled</div>
+                <div class="custom-option {% if history_status_filter == 'rejected' %}selected{% endif %}" data-value="rejected">Rejected</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="history_priority">Priority</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="history_priority" id="history_priority" value="{{ history_priority_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% if history_priority_filter == "low" %}Low
+                  {% elif history_priority_filter == "normal" %}Normal
+                  {% elif history_priority_filter == "high" %}High
+                  {% else %}All Priorities{% endif %}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not history_priority_filter %}selected{% endif %}" data-value="">All Priorities</div>
+                <div class="custom-option {% if history_priority_filter == 'low' %}selected{% endif %}" data-value="low">Low</div>
+                <div class="custom-option {% if history_priority_filter == 'normal' %}selected{% endif %}" data-value="normal">Normal</div>
+                <div class="custom-option {% if history_priority_filter == 'high' %}selected{% endif %}" data-value="high">High</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="history_supplier_id">Supplier</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="history_supplier_id" id="history_supplier_id" value="{{ history_supplier_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% set history_supplier_label = namespace(name='All Suppliers') %}
+                  {% for supplier in supplier_options %}
+                    {% if history_supplier_filter and history_supplier_filter|int == supplier[0] %}
+                      {% set history_supplier_label.name = supplier[1] %}
+                    {% endif %}
+                  {% endfor %}
+                  {{ history_supplier_label.name }}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not history_supplier_filter %}selected{% endif %}" data-value="">All Suppliers</div>
+                {% for supplier in supplier_options %}
+                  <div class="custom-option {% if history_supplier_filter and history_supplier_filter|int == supplier[0] %}selected{% endif %}" data-value="{{ supplier[0] }}">
+                    {{ supplier[1] }}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions procurement-form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply History Filters</button>
+          <a href="{{ url_for('purchase_requests', show_history='1') }}" class="dashboard-btn secondary">Reset History</a>
+        </div>
+      </form>
     </div>
   </div>
-
-  <form method="GET" class="order-form procurement-request-clean-form">
-    <input type="hidden" name="show_history" value="1">
-    <input type="hidden" name="search" value="{{ search }}">
-    <input type="hidden" name="status" value="{{ status_filter }}">
-    <input type="hidden" name="priority" value="{{ priority_filter }}">
-    <input type="hidden" name="supplier_id" value="{{ supplier_filter }}">
-
-    <div class="form-grid procurement-request-grid">
-      <div class="form-group">
-        <label for="history_search">Search</label>
-        <input type="text" id="history_search" name="history_search" value="{{ history_search }}">
-      </div>
-
-      <div class="form-group">
-        <label for="history_status">Status</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="history_status" id="history_status" value="{{ history_status_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% if history_status_filter == "received" %}Received
-              {% elif history_status_filter == "cancelled" %}Cancelled
-              {% elif history_status_filter == "rejected" %}Rejected
-              {% else %}All History Statuses{% endif %}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not history_status_filter %}selected{% endif %}" data-value="">All History Statuses</div>
-            <div class="custom-option {% if history_status_filter == 'received' %}selected{% endif %}" data-value="received">Received</div>
-            <div class="custom-option {% if history_status_filter == 'cancelled' %}selected{% endif %}" data-value="cancelled">Cancelled</div>
-            <div class="custom-option {% if history_status_filter == 'rejected' %}selected{% endif %}" data-value="rejected">Rejected</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="history_priority">Priority</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="history_priority" id="history_priority" value="{{ history_priority_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% if history_priority_filter == "low" %}Low
-              {% elif history_priority_filter == "normal" %}Normal
-              {% elif history_priority_filter == "high" %}High
-              {% else %}All Priorities{% endif %}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not history_priority_filter %}selected{% endif %}" data-value="">All Priorities</div>
-            <div class="custom-option {% if history_priority_filter == 'low' %}selected{% endif %}" data-value="low">Low</div>
-            <div class="custom-option {% if history_priority_filter == 'normal' %}selected{% endif %}" data-value="normal">Normal</div>
-            <div class="custom-option {% if history_priority_filter == 'high' %}selected{% endif %}" data-value="high">High</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="history_supplier_id">Supplier</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="history_supplier_id" id="history_supplier_id" value="{{ history_supplier_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% set history_supplier_label = namespace(name='All Suppliers') %}
-              {% for supplier in supplier_options %}
-                {% if history_supplier_filter and history_supplier_filter|int == supplier[0] %}
-                  {% set history_supplier_label.name = supplier[1] %}
-                {% endif %}
-              {% endfor %}
-              {{ history_supplier_label.name }}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not history_supplier_filter %}selected{% endif %}" data-value="">All Suppliers</div>
-            {% for supplier in supplier_options %}
-              <div class="custom-option {% if history_supplier_filter and history_supplier_filter|int == supplier[0] %}selected{% endif %}" data-value="{{ supplier[0] }}">
-                {{ supplier[1] }}
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-actions procurement-form-actions">
-      <button type="submit" class="dashboard-btn primary">Apply History Filters</button>
-      <a href="{{ url_for('purchase_requests', show_history='1') }}" class="dashboard-btn secondary">Reset History</a>
-    </div>
-  </form>
 </div>
 
 <div class="dashboard-table-card section-spacing">
