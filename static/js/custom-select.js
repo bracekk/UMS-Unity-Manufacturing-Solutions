@@ -83,3 +83,44 @@ function initCustomSelects(root = document) {
     });
   });
 }
+
+
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".filters-wrapper").forEach(wrapper => {
+    const button = wrapper.querySelector(".filters-toggle-btn");
+    const panel = wrapper.querySelector(".filters-panel");
+
+    if (!button || !panel) return;
+
+    const form = panel.querySelector("form");
+    let shouldOpen = false;
+
+    if (form) {
+      const fields = form.querySelectorAll("input, select, textarea");
+
+      fields.forEach(field => {
+        if (field.type === "hidden") return;
+        if (field.type === "checkbox" && field.checked && field.value !== "All") shouldOpen = true;
+        if (field.tagName === "SELECT" && field.value) shouldOpen = true;
+        if (field.type !== "checkbox" && field.value && field.value.trim() !== "") shouldOpen = true;
+      });
+    }
+
+    if (shouldOpen) {
+      panel.classList.remove("filters-collapsed");
+      panel.classList.add("filters-open");
+      button.setAttribute("aria-expanded", "true");
+    } else {
+      panel.classList.add("filters-collapsed");
+      panel.classList.remove("filters-open");
+      button.setAttribute("aria-expanded", "false");
+    }
+
+    button.addEventListener("click", function () {
+      const isOpen = panel.classList.contains("filters-open");
+      panel.classList.toggle("filters-open", !isOpen);
+      panel.classList.toggle("filters-collapsed", isOpen);
+      button.setAttribute("aria-expanded", String(!isOpen));
+    });
+  });
+});
