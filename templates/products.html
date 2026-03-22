@@ -15,25 +15,33 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing jobs-filter-card">
-  <form method="GET" action="{{ url_for('products') }}" class="order-form">
-    <div class="jobs-filter-grid jobs-filter-grid-compact">
-      <div class="form-group">
-        <label for="product_code">Product Code</label>
-        <input type="text" id="product_code" name="product_code" value="{{ filters.product_code }}" placeholder="Product code">
-      </div>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    Filters
+  </button>
 
-      <div class="form-group">
-        <label for="product_name">Product</label>
-        <input type="text" id="product_name" name="product_name" value="{{ filters.product_name }}" placeholder="Product name">
-      </div>
-    </div>
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card jobs-filter-card">
+      <form method="GET" action="{{ url_for('products') }}" class="order-form">
+        <div class="jobs-filter-grid jobs-filter-grid-compact">
+          <div class="form-group">
+            <label for="product_code">Product Code</label>
+            <input type="text" id="product_code" name="product_code" value="{{ filters.product_code }}" placeholder="Product code">
+          </div>
 
-    <div class="form-actions">
-      <button type="submit" class="dashboard-btn primary">Apply Filters</button>
-      <a href="{{ url_for('products') }}" class="dashboard-btn secondary">Clear</a>
+          <div class="form-group">
+            <label for="product_name">Product</label>
+            <input type="text" id="product_name" name="product_name" value="{{ filters.product_name }}" placeholder="Product name">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply Filters</button>
+          <a href="{{ url_for('products') }}" class="dashboard-btn secondary">Clear</a>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
 </div>
 
 <div class="dashboard-table-card">
