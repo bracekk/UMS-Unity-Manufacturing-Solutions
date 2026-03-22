@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import sqlite3
 from datetime import datetime, timedelta
 import calendar
@@ -504,33 +504,12 @@ def build_month_days(year, month):
         })
 
     return month_days
-def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
-    cursor.execute("""
-        SELECT layout_json
-        FROM dashboard_layouts
-        WHERE user_id = ? AND company_id = ? AND page_key = ?
-        LIMIT 1
-    """, (user_id, company_id, page_key))
-    row = cursor.fetchone()
-
-    if not row:
-        return []
-
-    try:
-        return json.loads(row[0])
-    except Exception:
-        return []
 
 
-def save_dashboard_layout_record(cursor, user_id, company_id, layout_state, page_key="dashboard"):
-    cursor.execute("""
-        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, company_id, page_key)
-        DO UPDATE SET
-            layout_json = excluded.layout_json,
-            updated_at = CURRENT_TIMESTAMP
-    """, (user_id, company_id, page_key, json.dumps(layout_state)))
+
+
+
+
 
 def generate_order_jobs_recursive(cursor, order_id, current_product_id, current_quantity, planned_date=None, path=None, company_id=None):
     if path is None:
@@ -719,16 +698,25 @@ def can_start_job(cursor, job_id, company_id=None):
 
     cursor.execute("""
         SELECT COUNT(*)
-        FROM order_jobs
-        WHERE order_id = ?
-          AND company_id = ?
-          AND sequence < ?
-          AND status != 'Done'
-          AND is_split_child = 0
+        FROM order_jobs prev
+        WHERE prev.order_id = ?
+          AND prev.company_id = ?
+          AND prev.sequence < ?
+          AND prev.status != 'Done'
+          AND (
+                prev.is_split_child = 1
+                OR NOT EXISTS (
+                    SELECT 1
+                    FROM order_jobs child
+                    WHERE child.parent_job_id = prev.id
+                      AND child.is_split_child = 1
+                      AND child.company_id = prev.company_id
+                )
+          )
     """, (order_id, company_id, sequence))
-    blocked_count = cursor.fetchone()[0]
+    remaining = cursor.fetchone()[0]
 
-    return blocked_count == 0
+    return remaining == 0
 
 
 def sync_order_status(cursor, order_id, company_id=None):
@@ -814,6 +802,8 @@ def create_split_children(cursor, parent_job_id, split_rows, company_id=None):
     if not is_float_equal(total_split_quantity, parent_planned_quantity):
         raise ValueError("Split quantities must match original planned quantity.")
 
+    parent_planned_start = parent[11]
+
     for row in split_rows:
         workstation_id = int(row["workstation_id"])
         split_quantity = float(row["quantity"])
@@ -850,19 +840,21 @@ def create_split_children(cursor, parent_job_id, split_rows, company_id=None):
             0,
             parent[9],          # estimated_hours
             "Waiting",
-            parent[11],         # planned_start
-            parent[12],         # planned_end
+            parent_planned_start,
+            parent_planned_start,
             parent_job_id,
             1,
             company_id
         ))
 
         new_child_id = cursor.lastrowid
-        recalculate_job_dates(cursor, new_child_id, parent[11])
+        recalculate_job_dates(cursor, new_child_id, parent_planned_start)
 
     cursor.execute("""
         UPDATE order_jobs
-        SET status = 'Paused'
+        SET status = 'Paused',
+            planned_start = NULL,
+            planned_end = NULL
         WHERE id = ?
           AND company_id = ?
     """, (parent_job_id, company_id))
@@ -939,35 +931,20 @@ def explode_bom_items_recursive(cursor, product_id, required_quantity, collected
 
 
 
-def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
-    cursor.execute("""
-        SELECT layout_json
-        FROM dashboard_layouts
-        WHERE user_id = ? AND company_id = ? AND page_key = ?
-        LIMIT 1
-    """, (user_id, company_id, page_key))
-    row = cursor.fetchone()
 
-    if not row:
-        return []
-
-    try:
-        return json.loads(row[0])
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return []
+def split_parent_exclusion_sql(alias="oj"):
+    return f"""
+        NOT EXISTS (
+            SELECT 1
+            FROM order_jobs child
+            WHERE child.parent_job_id = {alias}.id
+              AND child.is_split_child = 1
+              AND child.company_id = {alias}.company_id
+        )
+    """
 
 
-def save_dashboard_layout_record(cursor, user_id, company_id, layout_order, page_key="dashboard"):
-    layout_json = json.dumps(layout_order)
 
-    cursor.execute("""
-        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, company_id, page_key)
-        DO UPDATE SET
-            layout_json = excluded.layout_json,
-            updated_at = CURRENT_TIMESTAMP
-    """, (user_id, company_id, page_key, layout_json))
 
 
 def consume_job_materials(cursor, product_id, produced_quantity, company_id=None):
@@ -1057,33 +1034,9 @@ def reserve_order_materials(cursor, order_id, company_id=None):
     # Kept for compatibility and future extension.
     return False
 
-def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
-    cursor.execute("""
-        SELECT layout_json
-        FROM dashboard_layouts
-        WHERE user_id = ? AND company_id = ? AND page_key = ?
-        LIMIT 1
-    """, (user_id, company_id, page_key))
-    row = cursor.fetchone()
-
-    if not row:
-        return []
-
-    try:
-        return json.loads(row[0])
-    except Exception:
-        return []
 
 
-def save_dashboard_layout_record(cursor, user_id, company_id, layout_state, page_key="dashboard"):
-    cursor.execute("""
-        INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, company_id, page_key)
-        DO UPDATE SET
-            layout_json = excluded.layout_json,
-            updated_at = CURRENT_TIMESTAMP
-    """, (user_id, company_id, page_key, json.dumps(layout_state)))
+
 
 
 def calculate_product_material_cost(cursor, product_id, company_id=None):
@@ -1246,6 +1199,7 @@ def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
         WHERE user_id = ? AND company_id = ? AND page_key = ?
         LIMIT 1
     """, (user_id, company_id, page_key))
+
     row = cursor.fetchone()
 
     if not row:
@@ -1253,11 +1207,11 @@ def get_dashboard_layout(cursor, user_id, company_id, page_key="dashboard"):
 
     try:
         return json.loads(row[0])
-    except Exception:
+    except (TypeError, ValueError, json.JSONDecodeError):
         return []
 
 
-def save_dashboard_layout_record(cursor, user_id, company_id, layout_order, page_key="dashboard"):
+def save_dashboard_layout_record(cursor, user_id, company_id, layout_state, page_key="dashboard"):
     cursor.execute("""
         INSERT INTO dashboard_layouts (user_id, company_id, page_key, layout_json, updated_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -1265,7 +1219,7 @@ def save_dashboard_layout_record(cursor, user_id, company_id, layout_order, page
         DO UPDATE SET
             layout_json = excluded.layout_json,
             updated_at = CURRENT_TIMESTAMP
-    """, (user_id, company_id, page_key, json.dumps(layout_order)))
+    """, (user_id, company_id, page_key, json.dumps(layout_state)))
 
 def permission_required(permission_key):
     def decorator(view_func):
@@ -1502,14 +1456,24 @@ def dashboard():
                 )
                 FROM order_jobs oj
                 WHERE oj.workstation_id = w.id
-                  AND oj.company_id = w.company_id
-                  AND oj.status != 'Done'
-                  AND (
+                AND oj.company_id = w.company_id
+                AND oj.status != 'Done'
+                AND (
                         oj.status = 'Waiting'
                         OR oj.status = 'Ongoing'
                         OR oj.status = 'Paused'
                         OR oj.status = 'Delayed'
-                  )
+                )
+                AND (
+                        oj.is_split_child = 1
+                        OR NOT EXISTS (
+                            SELECT 1
+                            FROM order_jobs child
+                            WHERE child.parent_job_id = oj.id
+                            AND child.is_split_child = 1
+                            AND child.company_id = oj.company_id
+                        )
+                )
             ), 0) AS used_load
         FROM workstations w
         WHERE w.company_id = ?
@@ -1845,7 +1809,9 @@ def order_materials(order_id):
             p.id,
             p.product_name
         FROM orders o
-        JOIN products p ON o.product_id = p.id
+        JOIN products p
+          ON o.product_id = p.id
+         AND p.company_id = o.company_id
         WHERE o.id = ? AND o.company_id = ?
     """, (order_id, company_id))
 
@@ -1856,34 +1822,53 @@ def order_materials(order_id):
         return redirect(url_for("orders"))
 
     product_id = order[3]
-    quantity = order[2]
+    order_quantity = float(order[2] or 0)
 
-    exploded = explode_bom_items_recursive(
+    # BOM kiekis vienam produkto vienetui
+    per_unit_exploded = explode_bom_items_recursive(
         cursor,
         product_id,
-        quantity,
+        1,
+        company_id=company_id
+    )
+
+    # BOM kiekis visam užsakymui
+    total_exploded = explode_bom_items_recursive(
+        cursor,
+        product_id,
+        order_quantity,
         company_id=company_id
     )
 
     materials = []
+    total_material_cost = 0
 
-    for item_id, total_qty in exploded.items():
-        cursor.execute("""
-            SELECT item_name, item_code, measurement_unit, unit_price
+    item_ids = list(total_exploded.keys())
+
+    if item_ids:
+        placeholders = ",".join(["?"] * len(item_ids))
+        cursor.execute(f"""
+            SELECT id, item_name, item_code, measurement_unit, unit_price
             FROM items
-            WHERE id = ? AND company_id = ?
-        """, (item_id, company_id))
+            WHERE id IN ({placeholders}) AND company_id = ?
+            ORDER BY item_name ASC
+        """, item_ids + [company_id])
 
-        item = cursor.fetchone()
+        for item_id, item_name, item_code, measurement_unit, unit_price in cursor.fetchall():
+            bom_quantity = float(per_unit_exploded.get(item_id, 0) or 0)
+            total_quantity = float(total_exploded.get(item_id, 0) or 0)
+            unit_price = float(unit_price or 0)
+            total_cost = total_quantity * unit_price
+            total_material_cost += total_cost
 
-        if item:
             materials.append({
-                "item_name": item[0],
-                "item_code": item[1],
-                "unit": item[2],
-                "total_quantity": total_qty,
-                "unit_price": item[3],
-                "total_cost": total_qty * item[3]
+                "item_name": item_name,
+                "item_code": item_code,
+                "unit": measurement_unit,
+                "bom_quantity": bom_quantity,
+                "total_quantity": total_quantity,
+                "unit_price": unit_price,
+                "total_cost": total_cost
             })
 
     conn.close()
@@ -1892,10 +1877,12 @@ def order_materials(order_id):
         "order_materials.html",
         order={
             "order_number": order[1],
-            "quantity": quantity,
+            "quantity": order_quantity,
             "product_name": order[4]
         },
-        materials=materials
+        materials=materials,
+        total_material_cost=total_material_cost,
+        active_page="orders"
     )
 
 @app.route("/orders/delete/<int:order_id>", methods=["POST"])
@@ -3750,59 +3737,57 @@ def planner():
         return redirect(url_for("login"))
 
     company_id = get_company_id()
-    today = datetime.today()
 
+    today = datetime.today()
     year = request.args.get("year", type=int) or today.year
     month = request.args.get("month", type=int) or today.month
 
-    if month < 1:
-        month = 12
-        year -= 1
-    elif month > 12:
-        month = 1
-        year += 1
-
-    month_days = build_month_days(year, month)
     month_start = f"{year:04d}-{month:02d}-01"
-    month_end = f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+    last_day = calendar.monthrange(year, month)[1]
+    month_end = f"{year:04d}-{month:02d}-{last_day:02d}"
 
     prev_month = 12 if month == 1 else month - 1
     prev_year = year - 1 if month == 1 else year
     next_month = 1 if month == 12 else month + 1
     next_year = year + 1 if month == 12 else year
 
+    month_days = build_month_days(year, month)
+
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT
-            id,
-            name,
-            color,
-            hours_per_shift,
-            shifts_per_day
-        FROM workstations
-        WHERE company_id = ?
-        ORDER BY name ASC
+            w.id,
+            w.name,
+            w.description,
+            w.hours_per_shift,
+            w.shifts_per_day,
+            w.working_days_per_month,
+            w.color
+        FROM workstations w
+        WHERE w.company_id = ?
+        ORDER BY w.name ASC
     """, (company_id,))
     workstation_rows = cursor.fetchall()
 
     workstations = []
     workstation_map = {}
+    jobs_by_workstation = {}
 
     for row in workstation_rows:
         workstation = {
             "id": row[0],
             "name": row[1],
-            "color": row[2] or "#3b82f6",
+            "description": row[2],
             "hours_per_shift": float(row[3] or 0),
-            "shifts_per_day": float(row[4] or 0)
+            "shifts_per_day": int(row[4] or 0),
+            "working_days_per_month": int(row[5] or 0),
+            "color": row[6] or "#3b82f6"
         }
         workstations.append(workstation)
-        workstation_map[row[0]] = workstation
-
-    jobs_by_workstation = {w["id"]: [] for w in workstations}
-    unscheduled_jobs = []
+        workstation_map[workstation["id"]] = workstation
+        jobs_by_workstation[workstation["id"]] = []
 
     cursor.execute("""
         SELECT
@@ -3827,10 +3812,23 @@ def planner():
           ON oj.job_product_id = p.id
          AND p.company_id = oj.company_id
         WHERE oj.company_id = ?
+          AND (
+                oj.is_split_child = 1
+                OR NOT EXISTS (
+                    SELECT 1
+                    FROM order_jobs child
+                    WHERE child.parent_job_id = oj.id
+                      AND child.is_split_child = 1
+                      AND child.company_id = oj.company_id
+                )
+          )
         ORDER BY o.order_number ASC, oj.sequence ASC, oj.id ASC
     """, (company_id,))
     rows = cursor.fetchall()
+
     conn.close()
+
+    unscheduled_jobs = []
 
     for row in rows:
         workstation_id = row[1]
@@ -3914,30 +3912,69 @@ def planner():
 @app.route("/planner/update-job-date/<int:job_id>", methods=["POST"])
 def update_planner_job_date(job_id):
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
     company_id = get_company_id()
     planned_start = request.form.get("planned_start", "").strip()
+    workstation_id_raw = request.form.get("workstation_id", "").strip()
 
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT id
-        FROM order_jobs
-        WHERE id = ? AND company_id = ?
-    """, (job_id, company_id))
-    row = cursor.fetchone()
+    try:
+        require_company_record(cursor, "order_jobs", job_id, company_id, "Job not found.")
 
-    if row is None:
+        new_workstation_id = None
+        if workstation_id_raw:
+            try:
+                new_workstation_id = int(workstation_id_raw)
+            except ValueError:
+                return jsonify({"ok": False, "error": "Invalid workstation id"}), 400
+
+            require_company_record(
+                cursor,
+                "workstations",
+                new_workstation_id,
+                company_id,
+                "Workstation not found."
+            )
+
+            cursor.execute("""
+                UPDATE order_jobs
+                SET workstation_id = ?
+                WHERE id = ? AND company_id = ?
+            """, (new_workstation_id, job_id, company_id))
+
+        recalculate_job_dates(cursor, job_id, planned_start or None)
+
+        cursor.execute("""
+            SELECT planned_start, planned_end, workstation_id
+            FROM order_jobs
+            WHERE id = ? AND company_id = ?
+        """, (job_id, company_id))
+        updated = cursor.fetchone()
+
+        conn.commit()
         conn.close()
-        return ("", 404)
 
-    recalculate_job_dates(cursor, job_id, planned_start or None)
-    conn.commit()
-    conn.close()
+        return jsonify({
+            "ok": True,
+            "job_id": job_id,
+            "planned_start": updated[0],
+            "planned_end": updated[1],
+            "workstation_id": updated[2]
+        }), 200
 
-    return ("", 204)
+    except ValueError as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception:
+        conn.rollback()
+        conn.close()
+        return jsonify({"ok": False, "error": "Failed to update planner job."}), 500
+
+
 
 @app.route("/jobs/split/<int:job_id>", methods=["POST"])
 def split_job(job_id):
@@ -3961,6 +3998,7 @@ def split_job(job_id):
             ws_id = int(workstation_id)
             qty_value = float(quantity)
         except ValueError:
+            flash("Invalid split values.", "error")
             return redirect_back("jobs")
 
         if qty_value <= 0:
@@ -3980,19 +4018,41 @@ def split_job(job_id):
 
     try:
         require_company_record(cursor, "order_jobs", job_id, company_id, "Job not found.")
+
         for row in split_rows:
             require_company_record(cursor, "workstations", row["workstation_id"], company_id, "Workstation not found.")
 
-        create_split_children(cursor, job_id, split_rows)
+        create_split_children(
+            cursor,
+            job_id,
+            split_rows,
+            company_id=company_id
+        )
+
+        cursor.execute("""
+            SELECT order_id
+            FROM order_jobs
+            WHERE id = ? AND company_id = ?
+        """, (job_id, company_id))
+        parent_row = cursor.fetchone()
+
+        if parent_row:
+            sync_order_status(cursor, parent_row[0], company_id=company_id)
+
         conn.commit()
         flash("Job split successfully.", "success")
     except ValueError as e:
         conn.rollback()
         flash(str(e), "error")
+    except Exception:
+        conn.rollback()
+        flash("Failed to split job.", "error")
     finally:
         conn.close()
 
     return redirect_back("jobs")
+
+
 
 
 @app.route("/workstations")
@@ -4027,6 +4087,12 @@ def workstations():
                   AND oj.company_id = w.company_id
                   AND oj.status != 'Done'
                   AND (
+                        oj.status = 'Waiting'
+                        OR oj.status = 'Ongoing'
+                        OR oj.status = 'Paused'
+                        OR oj.status = 'Delayed'
+                  )
+                  AND (
                         oj.is_split_child = 1
                         OR NOT EXISTS (
                             SELECT 1
@@ -4035,7 +4101,7 @@ def workstations():
                               AND child.is_split_child = 1
                               AND child.company_id = oj.company_id
                         )
-                      )
+                  )
             ), 0) AS used_load
         FROM workstations w
         WHERE w.company_id = ?
