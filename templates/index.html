@@ -33,6 +33,7 @@
                     <a href="#product">Product</a>
                     <a href="#workflow">Workflow</a>
                     <a href="#pricing">Pricing</a>
+                    <a href="#contact">Contact us</a>
                 </nav>
 
                 <div class="landing-header-actions">
@@ -183,7 +184,9 @@
 
                     <div class="feature-grid">
                         <article class="feature-card tilt-card landing-reveal reveal-left" style="--reveal-delay: 0.04s;">
-                            <div class="feature-icon"></div>
+                            <div class="feature-icon">
+                                <img src="{{ url_for('static', filename='images/icons/orders.png') }}" alt="Orders icon">
+                            </div>
                             <h3>Orders tied to execution</h3>
                             <p>
                                 Move from demand to jobs with clearer visibility over what is
@@ -192,7 +195,9 @@
                         </article>
 
                         <article class="feature-card tilt-card landing-reveal reveal-scale" style="--reveal-delay: 0.1s;">
-                            <div class="feature-icon"></div>
+                            <div class="feature-icon">
+                                <img src="{{ url_for('static', filename='images/icons/planner.png') }}" alt="Planner icon">
+                            </div>
                             <h3>Planner in the same workflow</h3>
                             <p>
                                 Keep workstation load, queue awareness and scheduling decisions
@@ -201,7 +206,9 @@
                         </article>
 
                         <article class="feature-card tilt-card landing-reveal reveal-right" style="--reveal-delay: 0.16s;">
-                            <div class="feature-icon"></div>
+                            <div class="feature-icon">
+                                <img src="{{ url_for('static', filename='images/icons/inventory.png') }}" alt="Inventory icon">
+                            </div>
                             <h3>Inventory with BOM logic</h3>
                             <p>
                                 Link stock, products, shortages and execution signals in one
@@ -209,7 +216,6 @@
                             </p>
                         </article>
                     </div>
-                </div>
             </section>
 
             <section class="workspace-preview-section landing-section">
@@ -297,7 +303,9 @@
 
                     <div class="workflow-grid">
                         <article class="workflow-card landing-reveal reveal-left" style="--reveal-delay: 0.04s;">
-                            <div class="step-number">01</div>
+                            <div class="step-number">
+                                <img src="{{ url_for('static', filename='images/icons/orders.png') }}" alt="Orders">
+                            </div>
                             <h3>Capture demand</h3>
                             <p>
                                 Start from orders and turn incoming work into something the team
@@ -306,7 +314,9 @@
                         </article>
 
                         <article class="workflow-card landing-reveal reveal-scale" style="--reveal-delay: 0.1s;">
-                            <div class="step-number">02</div>
+                            <div class="step-number">
+                                <img src="{{ url_for('static', filename='images/icons/jobs.png') }}" alt="Jobs">
+                            </div>
                             <h3>Break into jobs</h3>
                             <p>
                                 Keep production tasks structured so execution is not floating
@@ -315,7 +325,9 @@
                         </article>
 
                         <article class="workflow-card landing-reveal reveal-scale" style="--reveal-delay: 0.16s;">
-                            <div class="step-number">03</div>
+                            <div class="step-number">
+                                <img src="{{ url_for('static', filename='images/icons/capacity.png') }}" alt="Capacity">
+                            </div>
                             <h3>Plan capacity</h3>
                             <p>
                                 Use planner and workstation visibility to understand where work
@@ -324,7 +336,9 @@
                         </article>
 
                         <article class="workflow-card landing-reveal reveal-right" style="--reveal-delay: 0.22s;">
-                            <div class="step-number">04</div>
+                            <div class="step-number">
+                                <img src="{{ url_for('static', filename='images/icons/production.png') }}" alt="Production">
+                            </div>
                             <h3>React faster</h3>
                             <p>
                                 See shortages, stock issues and execution blockers in the same
@@ -332,7 +346,6 @@
                             </p>
                         </article>
                     </div>
-                </div>
             </section>
 
             <section class="pricing-section landing-section" id="pricing">
@@ -572,6 +585,7 @@
                     <a href="#product">Product</a>
                     <a href="#workflow">Workflow</a>
                     <a href="#pricing">Pricing</a>
+                    <a href="#contact">Contact us</a>
                 </div>
             </div>
         </footer>
