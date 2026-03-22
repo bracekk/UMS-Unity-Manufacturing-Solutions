@@ -1655,12 +1655,37 @@ def new_order():
     cursor = conn.cursor()
 
     if request.method == "POST":
-        order_number = request.form["order_number"]
-        product_id = request.form["product_id"]
-        quantity = float(request.form["quantity"])
-        status = request.form["status"]
-        due_date = request.form["due_date"]
-        priority = request.form["priority"]
+        order_number = request.form["order_number"].strip()
+        product_id_raw = request.form.get("product_id", "").strip()
+        quantity_raw = request.form.get("quantity", "").strip()
+        status = request.form["status"].strip()
+        due_date = request.form["due_date"].strip()
+        priority = request.form["priority"].strip()
+
+        if not product_id_raw:
+            conn.close()
+            flash("No product selected. Create a product first or choose an existing one.", "error")
+            return redirect(url_for("new_order"))
+
+        try:
+            product_id = int(product_id_raw)
+            quantity = float(quantity_raw)
+        except ValueError:
+            conn.close()
+            flash("Invalid product or quantity.", "error")
+            return redirect(url_for("new_order"))
+
+        cursor.execute("""
+            SELECT id
+            FROM products
+            WHERE id = ? AND company_id = ?
+        """, (product_id, company_id))
+        product_row = cursor.fetchone()
+
+        if product_row is None:
+            conn.close()
+            flash("Selected product was not found in your current company.", "error")
+            return redirect(url_for("new_order"))
 
         cursor.execute("""
             INSERT INTO orders (
@@ -1685,11 +1710,10 @@ def new_order():
 
         order_id = cursor.lastrowid
 
-        # GENERATE JOBS (labai svarbu!)
         generate_order_jobs_recursive(
             cursor,
             order_id,
-            int(product_id),
+            product_id,
             quantity,
             planned_date=None,
             company_id=company_id
@@ -1698,19 +1722,24 @@ def new_order():
         conn.commit()
         conn.close()
 
+        flash("Order created successfully.", "success")
         return redirect(url_for("orders"))
 
-    # Tik tos kompanijos produktai
     cursor.execute("""
         SELECT id, product_code, product_name
         FROM products
         WHERE company_id = ?
+        ORDER BY product_name ASC, product_code ASC
     """, (company_id,))
     products = cursor.fetchall()
 
     conn.close()
 
-    return render_template("new_order.html", products=products)
+    return render_template(
+        "new_order.html",
+        products=products,
+        active_page="orders"
+    )
 
 
 @app.route("/orders/edit/<int:order_id>", methods=["GET", "POST"])
