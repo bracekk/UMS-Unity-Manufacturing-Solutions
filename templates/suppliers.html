@@ -51,47 +51,55 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing">
-  <div class="card-header">
-    <div>
-      <span class="card-kicker">Filters</span>
-      <h4>Supplier Filters</h4>
-    </div>
-  </div>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    Filters
+  </button>
 
-  <form method="GET" class="order-form procurement-request-clean-form">
-    <div class="form-grid procurement-request-grid">
-      <div class="form-group">
-        <label for="search">Search</label>
-        <input type="text" id="search" name="search" value="{{ search }}">
-      </div>
-
-      <div class="form-group">
-        <label for="status">Status</label>
-        <div class="custom-select" data-select>
-          <input type="hidden" name="status" id="status" value="{{ status_filter }}">
-          <button type="button" class="custom-select-trigger">
-            <span>
-              {% if status_filter == "active" %}Active
-              {% elif status_filter == "inactive" %}Inactive
-              {% else %}All Suppliers{% endif %}
-            </span>
-          </button>
-
-          <div class="custom-options">
-            <div class="custom-option {% if not status_filter %}selected{% endif %}" data-value="">All Suppliers</div>
-            <div class="custom-option {% if status_filter == 'active' %}selected{% endif %}" data-value="active">Active</div>
-            <div class="custom-option {% if status_filter == 'inactive' %}selected{% endif %}" data-value="inactive">Inactive</div>
-          </div>
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card">
+      <div class="card-header">
+        <div>
+          <span class="card-kicker">Filters</span>
+          <h4>Supplier Filters</h4>
         </div>
       </div>
-    </div>
 
-    <div class="form-actions procurement-form-actions">
-      <button type="submit" class="dashboard-btn primary">Apply Filters</button>
-      <a href="{{ url_for('suppliers') }}" class="dashboard-btn secondary">Reset</a>
+      <form method="GET" class="order-form procurement-request-clean-form">
+        <div class="form-grid procurement-request-grid">
+          <div class="form-group">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" value="{{ search }}">
+          </div>
+
+          <div class="form-group">
+            <label for="status">Status</label>
+            <div class="custom-select" data-select>
+              <input type="hidden" name="status" id="status" value="{{ status_filter }}">
+              <button type="button" class="custom-select-trigger">
+                <span>
+                  {% if status_filter == "active" %}Active
+                  {% elif status_filter == "inactive" %}Inactive
+                  {% else %}All Suppliers{% endif %}
+                </span>
+              </button>
+
+              <div class="custom-options">
+                <div class="custom-option {% if not status_filter %}selected{% endif %}" data-value="">All Suppliers</div>
+                <div class="custom-option {% if status_filter == 'active' %}selected{% endif %}" data-value="active">Active</div>
+                <div class="custom-option {% if status_filter == 'inactive' %}selected{% endif %}" data-value="inactive">Inactive</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions procurement-form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply Filters</button>
+          <a href="{{ url_for('suppliers') }}" class="dashboard-btn secondary">Reset</a>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
 </div>
 
 <div class="dashboard-table-card section-spacing">
