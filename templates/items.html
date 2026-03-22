@@ -15,25 +15,33 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing jobs-filter-card">
-  <form method="GET" action="{{ url_for('items') }}" class="order-form">
-    <div class="jobs-filter-grid jobs-filter-grid-compact">
-      <div class="form-group">
-        <label for="item_code">Item Code</label>
-        <input type="text" id="item_code" name="item_code" value="{{ filters.item_code }}" placeholder="Item code">
-      </div>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    Filters
+  </button>
 
-      <div class="form-group">
-        <label for="item_name">Item</label>
-        <input type="text" id="item_name" name="item_name" value="{{ filters.item_name }}" placeholder="Item name">
-      </div>
-    </div>
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card jobs-filter-card">
+      <form method="GET" action="{{ url_for('items') }}" class="order-form">
+        <div class="jobs-filter-grid jobs-filter-grid-compact">
+          <div class="form-group">
+            <label for="item_code">Item Code</label>
+            <input type="text" id="item_code" name="item_code" value="{{ filters.item_code }}" placeholder="Item code">
+          </div>
 
-    <div class="form-actions">
-      <button type="submit" class="dashboard-btn primary">Apply Filters</button>
-      <a href="{{ url_for('items') }}" class="dashboard-btn secondary">Clear</a>
+          <div class="form-group">
+            <label for="item_name">Item</label>
+            <input type="text" id="item_name" name="item_name" value="{{ filters.item_name }}" placeholder="Item name">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply Filters</button>
+          <a href="{{ url_for('items') }}" class="dashboard-btn secondary">Clear</a>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
 </div>
 
 <div class="dashboard-table-card">
