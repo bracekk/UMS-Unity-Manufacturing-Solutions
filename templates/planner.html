@@ -119,48 +119,107 @@
 </div>
 
 <script>
+let activeDraggedJob = null;
+let plannerBusy = false;
+
 function allowDrop(event) {
   event.preventDefault();
   event.currentTarget.classList.add("drag-over");
 }
 
 function dragJob(event) {
-  event.dataTransfer.setData("jobId", event.currentTarget.dataset.jobId);
-}
+  const el = event.currentTarget;
+  const jobId = el.dataset.jobId;
 
-function dropJob(event) {
-  event.preventDefault();
-  event.currentTarget.classList.remove("drag-over");
+  activeDraggedJob = el;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("jobId", jobId);
 
-  const jobId = event.dataTransfer.getData("jobId");
-  const targetDate = event.currentTarget.dataset.date;
-
-  if (!jobId || !targetDate) return;
-
-  const formData = new FormData();
-  formData.append("planned_start", targetDate);
-
-  fetch(`/planner/update-job-date/${jobId}`, {
-    method: "POST",
-    body: formData
-  })
-  .then(response => {
-    if (!response.ok) {
-      alert("Failed to update planner date.");
-      return;
-    }
-    window.location.reload();
-  })
-  .catch(() => {
-    alert("Failed to update planner date.");
+  requestAnimationFrame(() => {
+    el.classList.add("is-dragging");
   });
 }
 
-/* remove highlight when leaving cell */
+function clearPlannerHighlights() {
+  document.querySelectorAll(".planner-day-slot.drag-over").forEach(el => {
+    el.classList.remove("drag-over");
+  });
+}
+
+function finishDragState() {
+  document.querySelectorAll(".planner-job-bar.is-dragging, .planner-unscheduled-card.is-dragging").forEach(el => {
+    el.classList.remove("is-dragging");
+  });
+  activeDraggedJob = null;
+}
+
+async function dropJob(event) {
+  event.preventDefault();
+
+  if (plannerBusy) return;
+
+  const slot = event.currentTarget;
+  slot.classList.remove("drag-over");
+
+  const jobId = event.dataTransfer.getData("jobId");
+  const targetDate = slot.dataset.date;
+  const workstationId = slot.dataset.workstationId;
+
+  if (!jobId || !targetDate || !workstationId) {
+    finishDragState();
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("planned_start", targetDate);
+  formData.append("workstation_id", workstationId);
+
+  plannerBusy = true;
+  document.body.classList.add("planner-is-saving");
+
+  try {
+    const response = await fetch(`/planner/update-job-date/${jobId}`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Failed to update planner job.");
+    }
+
+    if (activeDraggedJob) {
+      activeDraggedJob.style.opacity = "0.45";
+    }
+
+    const currentUrl = new URL(window.location.href);
+    window.location.replace(currentUrl.toString());
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Failed to update planner job.");
+  } finally {
+    plannerBusy = false;
+    document.body.classList.remove("planner-is-saving");
+    clearPlannerHighlights();
+    finishDragState();
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".planner-day-slot").forEach(el => {
     el.addEventListener("dragleave", () => {
       el.classList.remove("drag-over");
+    });
+  });
+
+  document.querySelectorAll(".planner-job-bar, .planner-unscheduled-card").forEach(el => {
+    el.addEventListener("dragend", () => {
+      clearPlannerHighlights();
+      finishDragState();
     });
   });
 });
