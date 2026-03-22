@@ -14,138 +14,146 @@
   </div>
 </div>
 
-<div class="dashboard-form-card section-spacing jobs-filter-card">
-  <form method="GET" action="{{ url_for('jobs') }}" class="order-form live-filter-form" data-target="#jobs-results">
-    <div class="jobs-filter-grid jobs-filter-grid-compact">
-      <div class="form-group">
-        <label for="order_number">Order</label>
-        <input
-          type="text"
-          id="order_number"
-          name="order_number"
-          value="{{ filters.order_number }}"
-          placeholder="Order number"
-        >
-      </div>
+<div class="filters-wrapper section-spacing">
+  <button type="button" class="filters-toggle-btn" aria-expanded="false">
+    Filters
+  </button>
 
-      <div class="form-group">
-        <label for="product_name">Product</label>
-        <input
-          type="text"
-          id="product_name"
-          name="product_name"
-          value="{{ filters.product_name }}"
-          placeholder="Product name"
-        >
-      </div>
+  <div class="filters-panel filters-collapsed">
+    <div class="dashboard-form-card jobs-filter-card">
+      <form method="GET" action="{{ url_for('jobs') }}" class="order-form live-filter-form" data-target="#jobs-results">
+        <div class="jobs-filter-grid jobs-filter-grid-compact">
+          <div class="form-group">
+            <label for="order_number">Order</label>
+            <input
+              type="text"
+              id="order_number"
+              name="order_number"
+              value="{{ filters.order_number }}"
+              placeholder="Order number"
+            >
+          </div>
 
-      <div class="form-group">
-        <label for="workstation_text">Workstation</label>
-        <input
-          type="text"
-          id="workstation_text"
-          name="workstation_text"
-          value="{{ filters.workstation_text }}"
-          placeholder="Workstation name"
-        >
-      </div>
-    </div>
+          <div class="form-group">
+            <label for="product_name">Product</label>
+            <input
+              type="text"
+              id="product_name"
+              name="product_name"
+              value="{{ filters.product_name }}"
+              placeholder="Product name"
+            >
+          </div>
 
-    <div class="jobs-status-pills">
-      <span class="jobs-status-label">Status</span>
-
-      <label class="jobs-pill-option">
-        <input
-          type="checkbox"
-          name="status"
-          value="All"
-          {% if not filters.status or "All" in filters.status %}checked{% endif %}
-        >
-        <span>All</span>
-      </label>
-
-      <label class="jobs-pill-option">
-        <input
-          type="checkbox"
-          name="status"
-          value="Waiting"
-          {% if "Waiting" in filters.status %}checked{% endif %}
-        >
-        <span>Waiting</span>
-      </label>
-
-      <label class="jobs-pill-option">
-        <input
-          type="checkbox"
-          name="status"
-          value="Ongoing"
-          {% if "Ongoing" in filters.status %}checked{% endif %}
-        >
-        <span>Ongoing</span>
-      </label>
-
-      <label class="jobs-pill-option">
-        <input
-          type="checkbox"
-          name="status"
-          value="Paused"
-          {% if "Paused" in filters.status %}checked{% endif %}
-        >
-        <span>Paused</span>
-      </label>
-
-      <label class="jobs-pill-option">
-        <input
-          type="checkbox"
-          name="status"
-          value="Done"
-          {% if "Done" in filters.status %}checked{% endif %}
-        >
-        <span>Done</span>
-      </label>
-    </div>
-
-    <details class="jobs-more-filters">
-      <summary>More filters</summary>
-
-      <div class="jobs-more-filters-grid">
-        <div class="form-group">
-          <label for="job_name">Job Name</label>
-          <input
-            type="text"
-            id="job_name"
-            name="job_name"
-            value="{{ filters.job_name }}"
-            placeholder="Job name"
-          >
+          <div class="form-group">
+            <label for="workstation_text">Workstation</label>
+            <input
+              type="text"
+              id="workstation_text"
+              name="workstation_text"
+              value="{{ filters.workstation_text }}"
+              placeholder="Workstation name"
+            >
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="due_date_from">Due Date From</label>
-          <input
-            type="date"
-            id="due_date_from"
-            name="due_date_from"
-            value="{{ filters.due_date_from }}"
-          >
+        <div class="jobs-status-pills">
+          <span class="jobs-status-label">Status</span>
+
+          <label class="jobs-pill-option">
+            <input
+              type="checkbox"
+              name="status"
+              value="All"
+              {% if not filters.status or "All" in filters.status %}checked{% endif %}
+            >
+            <span>All</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input
+              type="checkbox"
+              name="status"
+              value="Waiting"
+              {% if "Waiting" in filters.status %}checked{% endif %}
+            >
+            <span>Waiting</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input
+              type="checkbox"
+              name="status"
+              value="Ongoing"
+              {% if "Ongoing" in filters.status %}checked{% endif %}
+            >
+            <span>Ongoing</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input
+              type="checkbox"
+              name="status"
+              value="Paused"
+              {% if "Paused" in filters.status %}checked{% endif %}
+            >
+            <span>Paused</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input
+              type="checkbox"
+              name="status"
+              value="Done"
+              {% if "Done" in filters.status %}checked{% endif %}
+            >
+            <span>Done</span>
+          </label>
         </div>
 
-        <div class="form-group">
-          <label for="due_date_to">Due Date To</label>
-          <input
-            type="date"
-            id="due_date_to"
-            name="due_date_to"
-            value="{{ filters.due_date_to }}"
-          >
-        </div>
-      </div>
-    </details>
+        <details class="jobs-more-filters">
+          <summary>More filters</summary>
 
-    <div class="form-actions">
-      <a href="{{ url_for('jobs') }}" class="dashboard-btn secondary">Clear</a>
+          <div class="jobs-more-filters-grid">
+            <div class="form-group">
+              <label for="job_name">Job Name</label>
+              <input
+                type="text"
+                id="job_name"
+                name="job_name"
+                value="{{ filters.job_name }}"
+                placeholder="Job name"
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="due_date_from">Due Date From</label>
+              <input
+                type="date"
+                id="due_date_from"
+                name="due_date_from"
+                value="{{ filters.due_date_from }}"
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="due_date_to">Due Date To</label>
+              <input
+                type="date"
+                id="due_date_to"
+                name="due_date_to"
+                value="{{ filters.due_date_to }}"
+              >
+            </div>
+          </div>
+        </details>
+
+        <div class="form-actions">
+          <a href="{{ url_for('jobs') }}" class="dashboard-btn secondary">Clear</a>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
 </div>
 
 <div id="jobs-results">
