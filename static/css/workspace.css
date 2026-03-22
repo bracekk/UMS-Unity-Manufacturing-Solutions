@@ -6747,3 +6747,344 @@ textarea::placeholder {
     opacity: 0.55;
     pointer-events: none;
 }
+
+/* ========================================
+   PRODUCT FORM + BOM POLISH
+   append at end of workspace.css
+======================================== */
+
+.product-form-shell,
+.bom-form-shell {
+    overflow: visible;
+}
+
+.product-clean-form,
+.bom-clean-form {
+    gap: 0;
+}
+
+.product-form-grid,
+.bom-form-grid {
+    align-items: start;
+    gap: 18px;
+}
+
+.product-select-group,
+.bom-select-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.product-select-group > label,
+.bom-select-group > label {
+    margin: 0 0 6px 2px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-soft);
+}
+
+.product-form-shell .custom-select,
+.bom-form-shell .custom-select {
+    width: 100%;
+}
+
+.product-form-shell .custom-select-trigger,
+.bom-form-shell .custom-select-trigger {
+    min-height: 58px !important;
+    height: 58px !important;
+    padding: 0 18px !important;
+}
+
+.product-form-shell .custom-select-trigger span,
+.bom-form-shell .custom-select-trigger span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.product-description-group textarea {
+    min-height: 180px !important;
+}
+
+.product-form-actions,
+.bom-form-actions {
+    margin-top: 22px;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.custom-select-trigger.is-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.bom-form-grid #item-select-group,
+.bom-form-grid #product-select-group {
+    min-width: 0;
+}
+
+.bom-quantity-group input {
+    width: 100%;
+}
+
+@media (max-width: 1100px) {
+    .bom-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .product-form-grid,
+    .bom-form-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .product-form-actions,
+    .bom-form-actions {
+        flex-wrap: wrap;
+    }
+
+    .product-form-actions .dashboard-btn,
+    .bom-form-actions .dashboard-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ========================================
+   PRODUCT + BOM LAYOUT FIX
+======================================== */
+
+.product-form-shell,
+.bom-form-shell {
+    overflow: visible;
+}
+
+.product-clean-form,
+.bom-clean-form {
+    gap: 0;
+}
+
+.product-form-grid,
+.bom-form-grid {
+    align-items: start;
+    gap: 18px;
+}
+
+.product-select-group,
+.bom-select-group,
+.bom-submit-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.product-static-label,
+.product-select-group > label,
+.bom-select-group > label,
+.bom-submit-label {
+    display: block;
+    margin: 0 0 10px 2px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-soft);
+    letter-spacing: 0;
+}
+
+.product-form-shell .custom-select,
+.bom-form-shell .custom-select {
+    width: 100%;
+}
+
+.product-form-shell .custom-select-trigger,
+.bom-form-shell .custom-select-trigger {
+    min-height: 60px !important;
+    height: 60px !important;
+    padding: 0 18px !important;
+    border-radius: 20px !important;
+    display: flex;
+    align-items: center;
+}
+
+.product-form-shell .custom-select-trigger span,
+.bom-form-shell .custom-select-trigger span {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.product-measurement-select {
+    margin-top: 0;
+}
+
+.product-description-group textarea {
+    min-height: 180px !important;
+}
+
+.product-form-actions {
+    margin-top: 22px;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.custom-select-trigger.is-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.bom-form-grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(0, 1fr) auto !important;
+    align-items: end;
+}
+
+.bom-form-grid #item-select-group,
+.bom-form-grid #product-select-group,
+.bom-quantity-group {
+    min-width: 0;
+}
+
+.bom-quantity-group {
+    margin: 0;
+}
+
+.bom-quantity-group input {
+    width: 100%;
+}
+
+.bom-submit-group {
+    justify-content: flex-end;
+    align-self: end;
+    min-width: 220px;
+}
+
+.bom-submit-btn {
+    width: 100%;
+    min-height: 60px;
+    justify-content: center;
+    white-space: nowrap;
+    border-radius: 18px;
+}
+
+@media (max-width: 1180px) {
+    .bom-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        align-items: start;
+    }
+
+    .bom-submit-group {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 900px) {
+    .product-form-grid,
+    .bom-form-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .product-form-actions {
+        flex-wrap: wrap;
+    }
+
+    .product-form-actions .dashboard-btn,
+    .bom-submit-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ========================================
+   BOM ALIGNMENT FIX
+======================================== */
+
+.bom-form-grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(0, 0.95fr) auto !important;
+    align-items: start !important;
+    gap: 22px;
+}
+
+.bom-select-group,
+.bom-quantity-group,
+.bom-submit-group {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.bom-select-group > label,
+.bom-submit-label,
+.bom-field-label {
+    display: block;
+    margin: 0 0 10px 2px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-soft);
+}
+
+.bom-quantity-group input {
+    width: 100%;
+    height: 60px;
+    min-height: 60px;
+    padding: 0 18px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: 600;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.bom-quantity-group input:focus {
+    outline: none;
+    border-color: rgba(122, 92, 255, 0.55);
+    box-shadow: 0 0 0 4px rgba(122, 92, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.bom-submit-group {
+    justify-content: flex-start;
+    align-self: start;
+    min-width: 240px;
+}
+
+.bom-submit-btn {
+    width: 100%;
+    min-height: 60px;
+    height: 60px;
+    justify-content: center;
+    white-space: nowrap;
+    border-radius: 20px;
+    margin-top: 0;
+}
+
+@media (max-width: 1180px) {
+    .bom-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .bom-submit-group {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 900px) {
+    .bom-form-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bom-submit-btn {
+        width: 100%;
+    }
+}
