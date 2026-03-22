@@ -29,10 +29,15 @@
             <a href="{{ url_for('inventory') }}" class="{% if active_page == 'inventory' %}active{% endif %}">Inventory</a>
 
             {% if has_permission_ui("manage_procurement") %}
-            <div class="sidebar-section-title">Procurement</div>
-            <a href="{{ url_for('purchase_requests') }}" class="{% if active_page == 'purchase_requests' %}active{% endif %}">Requests</a>
-            <a href="{{ url_for('suppliers') }}" class="{% if active_page == 'suppliers' %}active{% endif %}">Suppliers</a>
-            <a href="{{ url_for('materials_shortage') }}" class="{% if active_page == 'shortage' %}active{% endif %}">Shortages</a>
+                <div class="sidebar-section-title">Procurement</div>
+                <a href="{{ url_for('purchase_requests') }}" class="{% if active_page == 'purchase_requests' %}active{% endif %}">Requests</a>
+                <a href="{{ url_for('suppliers') }}" class="{% if active_page == 'suppliers' %}active{% endif %}">Suppliers</a>
+                <a href="{{ url_for('materials_shortage') }}" class="{% if active_page == 'shortage' %}active{% endif %}">Shortages</a>
+            {% endif %}
+
+            {% if has_permission_ui("view_reports") %}
+                <div class="sidebar-section-title">Reporting</div>
+                <a href="{{ url_for('reports') }}" class="{% if active_page == 'reports' %}active{% endif %}">Reports</a>
             {% endif %}
         </nav>
     </aside>
@@ -79,8 +84,9 @@
     </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard-workspace.js') }}"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -110,79 +116,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const statusInputs = Array.from(document.querySelectorAll('input[name="status"]'));
-  if (!statusInputs.length) return;
-
-  const allInput = statusInputs.find(input => input.value === "All");
-  const otherInputs = statusInputs.filter(input => input.value !== "All");
-
-  function syncStatusCheckboxes(changedInput) {
-    if (!allInput) return;
-
-    if (changedInput === allInput && allInput.checked) {
-      otherInputs.forEach(input => input.checked = false);
-      return;
-    }
-
-    if (changedInput !== allInput && changedInput.checked) {
-      allInput.checked = false;
-    }
-
-    const anyOtherChecked = otherInputs.some(input => input.checked);
-
-    if (!anyOtherChecked) {
-      allInput.checked = true;
-    }
-  }
-
-  statusInputs.forEach(input => {
-    input.addEventListener("change", function () {
-      syncStatusCheckboxes(this);
-    });
-  });
-
-  const anyOtherCheckedOnLoad = otherInputs.some(input => input.checked);
-  if (allInput) {
-    allInput.checked = !anyOtherCheckedOnLoad;
-  }
-});
-</script>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const liveForms = document.querySelectorAll(".live-filter-form");
-    if (!liveForms.length) return;
-
-    liveForms.forEach(form => {
-        const inputs = form.querySelectorAll("input, select, textarea");
-
-        inputs.forEach(input => {
-            if (input.type === "text") {
-                return;
-            }
-
-            input.addEventListener("change", function () {
-                form.submit();
-            });
-        });
-
-        const textInputs = form.querySelectorAll('input[type="text"]');
-        textInputs.forEach(input => {
-            input.addEventListener("keypress", function (e) {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    form.submit();
-                }
-            });
-        });
-    });
-});
-</script>
-
-<script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
     const trigger = document.getElementById("accountMenuTrigger");
     const dropdown = document.getElementById("accountMenuDropdown");
 
@@ -207,121 +140,72 @@ document.addEventListener("DOMContentLoaded", function () {
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    const dashboardGrid = document.getElementById("dashboardGrid");
-    if (!dashboardGrid || typeof Sortable === "undefined") return;
+    const statusInputs = Array.from(document.querySelectorAll('input[name="status"]'));
+    if (!statusInputs.length) return;
 
-    const storageKey = "ums-dashboard-layout-v1";
-    const saveUrl = dashboardGrid.dataset.saveUrl || "";
+    const allInput = statusInputs.find(input => input.value === "All");
+    const otherInputs = statusInputs.filter(input => input.value !== "All");
 
-    function getWidgets() {
-        return Array.from(dashboardGrid.querySelectorAll(".dashboard-widget"));
-    }
+    function syncStatusCheckboxes(changedInput) {
+        if (!allInput) return;
 
-    function saveLayoutLocal() {
-        const order = getWidgets().map(widget => widget.dataset.widgetId);
-        localStorage.setItem(storageKey, JSON.stringify(order));
-        return order;
-    }
+        if (changedInput === allInput && allInput.checked) {
+            otherInputs.forEach(input => input.checked = false);
+            return;
+        }
 
-    function applySavedLayout(savedOrder) {
-        if (!Array.isArray(savedOrder) || !savedOrder.length) return;
+        if (changedInput !== allInput && changedInput.checked) {
+            allInput.checked = false;
+        }
 
-        const widgetMap = {};
-        getWidgets().forEach(widget => {
-            widgetMap[widget.dataset.widgetId] = widget;
-        });
+        const anyOtherChecked = otherInputs.some(input => input.checked);
 
-        savedOrder.forEach(id => {
-            const widget = widgetMap[id];
-            if (widget) {
-                dashboardGrid.appendChild(widget);
-            }
-        });
-    }
-
-    function restoreLocalLayout() {
-        try {
-            const saved = JSON.parse(localStorage.getItem(storageKey));
-            applySavedLayout(saved);
-        } catch (error) {
-            console.warn("Dashboard layout restore failed", error);
+        if (!anyOtherChecked) {
+            allInput.checked = true;
         }
     }
 
-    function saveLayoutServer(order) {
-        if (!saveUrl) return;
-
-        fetch(saveUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ order })
-        }).catch(error => {
-            console.warn("Dashboard layout save failed", error);
+    statusInputs.forEach(input => {
+        input.addEventListener("change", function () {
+            syncStatusCheckboxes(this);
         });
-    }
-
-    restoreLocalLayout();
-
-    const sortable = new Sortable(dashboardGrid, {
-        animation: 220,
-        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-        handle: ".widget-drag-handle",
-        ghostClass: "dashboard-sortable-ghost",
-        chosenClass: "dashboard-sortable-chosen",
-        dragClass: "dashboard-sortable-drag",
-        onEnd: function () {
-            const order = saveLayoutLocal();
-            saveLayoutServer(order);
-        }
     });
 
-    const resetBtn = document.getElementById("dashboardResetBtn");
-    if (resetBtn) {
-        resetBtn.addEventListener("click", function () {
-            localStorage.removeItem(storageKey);
-            window.location.reload();
-        });
+    const anyOtherCheckedOnLoad = otherInputs.some(input => input.checked);
+    if (allInput) {
+        allInput.checked = !anyOtherCheckedOnLoad;
     }
-
-    const exportBtn = document.getElementById("dashboardExportBtn");
-    if (exportBtn) {
-        exportBtn.addEventListener("click", function () {
-            window.print();
-        });
-    }
-
-    if (typeof gsap !== "undefined") {
-        gsap.from(".dashboard-widget", {
-            y: 18,
-            opacity: 0,
-            duration: 0.55,
-            stagger: 0.05,
-            ease: "power3.out"
-        });
-
-        document.querySelectorAll(".dashboard-draggable-card").forEach((card) => {
-            card.addEventListener("mousemove", function (e) {
-                const rect = card.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-
-                card.style.setProperty("--mx", x + "px");
-                card.style.setProperty("--my", y + "px");
-            });
-        });
-    }
-
-    window.addEventListener("beforeunload", function () {
-        saveLayoutLocal();
-    });
 });
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
-<script src="{{ url_for('static', filename='js/dashboard-workspace.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const liveForms = document.querySelectorAll(".live-filter-form");
+    if (!liveForms.length) return;
+
+    liveForms.forEach(form => {
+        const inputs = form.querySelectorAll("input, select, textarea");
+
+        inputs.forEach(input => {
+            if (input.type === "text") return;
+
+            input.addEventListener("change", function () {
+                form.submit();
+            });
+        });
+
+        const textInputs = form.querySelectorAll('input[type="text"]');
+        textInputs.forEach(input => {
+            input.addEventListener("keypress", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    form.submit();
+                }
+            });
+        });
+    });
+});
+</script>
 
 </body>
 </html>
