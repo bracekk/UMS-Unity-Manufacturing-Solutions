@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+
 {% block title %}UMS | Jobs{% endblock %}
 
 {% block content %}
@@ -7,10 +8,6 @@
     <span class="eyebrow-label">Execution</span>
     <h1>Jobs</h1>
     <p>Manage live production jobs, routing, progress and split work in one operational view.</p>
-  </div>
-
-  <div class="jobs-header-right">
-    <a href="{{ url_for('planner') }}" class="dashboard-btn primary">Open Planner</a>
   </div>
 </div>
 
@@ -21,94 +18,27 @@
 
   <div class="filters-panel filters-collapsed">
     <div class="dashboard-form-card jobs-filter-card">
-      <form method="GET" action="{{ url_for('jobs') }}" class="order-form live-filter-form" data-target="#jobs-results">
-        <div class="jobs-filter-grid jobs-filter-grid-compact">
+      <form method="GET" action="{{ url_for('jobs') }}" class="order-form live-filter-form">
+        <div class="jobs-filter-grid">
           <div class="form-group">
             <label for="order_number">Order</label>
-            <input
-              type="text"
-              id="order_number"
-              name="order_number"
-              value="{{ filters.order_number }}"
-              placeholder="Order number"
-            >
+            <input type="text" id="order_number" name="order_number" value="{{ filters.order_number }}" placeholder="Order number">
           </div>
 
           <div class="form-group">
             <label for="product_name">Product</label>
-            <input
-              type="text"
-              id="product_name"
-              name="product_name"
-              value="{{ filters.product_name }}"
-              placeholder="Product name"
-            >
+            <input type="text" id="product_name" name="product_name" value="{{ filters.product_name }}" placeholder="Product name">
+          </div>
+
+          <div class="form-group">
+            <label for="job_name">Job</label>
+            <input type="text" id="job_name" name="job_name" value="{{ filters.job_name }}" placeholder="Job name">
           </div>
 
           <div class="form-group">
             <label for="workstation_text">Workstation</label>
-            <input
-              type="text"
-              id="workstation_text"
-              name="workstation_text"
-              value="{{ filters.workstation_text }}"
-              placeholder="Workstation name"
-            >
+            <input type="text" id="workstation_text" name="workstation_text" value="{{ filters.workstation_text }}" placeholder="Workstation name">
           </div>
-        </div>
-
-        <div class="jobs-status-pills">
-          <span class="jobs-status-label">Status</span>
-
-          <label class="jobs-pill-option">
-            <input
-              type="checkbox"
-              name="status"
-              value="All"
-              {% if not filters.status or "All" in filters.status %}checked{% endif %}
-            >
-            <span>All</span>
-          </label>
-
-          <label class="jobs-pill-option">
-            <input
-              type="checkbox"
-              name="status"
-              value="Waiting"
-              {% if "Waiting" in filters.status %}checked{% endif %}
-            >
-            <span>Waiting</span>
-          </label>
-
-          <label class="jobs-pill-option">
-            <input
-              type="checkbox"
-              name="status"
-              value="Ongoing"
-              {% if "Ongoing" in filters.status %}checked{% endif %}
-            >
-            <span>Ongoing</span>
-          </label>
-
-          <label class="jobs-pill-option">
-            <input
-              type="checkbox"
-              name="status"
-              value="Paused"
-              {% if "Paused" in filters.status %}checked{% endif %}
-            >
-            <span>Paused</span>
-          </label>
-
-          <label class="jobs-pill-option">
-            <input
-              type="checkbox"
-              name="status"
-              value="Done"
-              {% if "Done" in filters.status %}checked{% endif %}
-            >
-            <span>Done</span>
-          </label>
         </div>
 
         <details class="jobs-more-filters">
@@ -116,39 +46,58 @@
 
           <div class="jobs-more-filters-grid">
             <div class="form-group">
-              <label for="job_name">Job Name</label>
-              <input
-                type="text"
-                id="job_name"
-                name="job_name"
-                value="{{ filters.job_name }}"
-                placeholder="Job name"
-              >
+              <label for="workstation">Workstation select</label>
+              <select id="workstation" name="workstation">
+                <option value="">All workstations</option>
+                {% for ws in workstations %}
+                  <option value="{{ ws.id }}" {% if filters.workstation|string == ws.id|string %}selected{% endif %}>{{ ws.name }}</option>
+                {% endfor %}
+              </select>
             </div>
 
             <div class="form-group">
-              <label for="due_date_from">Due Date From</label>
-              <input
-                type="date"
-                id="due_date_from"
-                name="due_date_from"
-                value="{{ filters.due_date_from }}"
-              >
+              <label for="due_date_from">Due date from</label>
+              <input type="date" id="due_date_from" name="due_date_from" value="{{ filters.due_date_from }}">
             </div>
 
             <div class="form-group">
-              <label for="due_date_to">Due Date To</label>
-              <input
-                type="date"
-                id="due_date_to"
-                name="due_date_to"
-                value="{{ filters.due_date_to }}"
-              >
+              <label for="due_date_to">Due date to</label>
+              <input type="date" id="due_date_to" name="due_date_to" value="{{ filters.due_date_to }}">
             </div>
           </div>
         </details>
 
+        <div class="jobs-status-pills">
+          <span class="jobs-status-label">Status</span>
+
+          <label class="jobs-pill-option">
+            <input type="checkbox" name="status" value="All" {% if not filters.status or 'All' in filters.status %}checked{% endif %}>
+            <span>All</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input type="checkbox" name="status" value="Waiting" {% if 'Waiting' in filters.status %}checked{% endif %}>
+            <span>Waiting</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input type="checkbox" name="status" value="Ongoing" {% if 'Ongoing' in filters.status %}checked{% endif %}>
+            <span>Ongoing</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input type="checkbox" name="status" value="Paused" {% if 'Paused' in filters.status %}checked{% endif %}>
+            <span>Paused</span>
+          </label>
+
+          <label class="jobs-pill-option">
+            <input type="checkbox" name="status" value="Done" {% if 'Done' in filters.status %}checked{% endif %}>
+            <span>Done</span>
+          </label>
+        </div>
+
         <div class="form-actions">
+          <button type="submit" class="dashboard-btn primary">Apply Filters</button>
           <a href="{{ url_for('jobs') }}" class="dashboard-btn secondary">Clear</a>
         </div>
       </form>
@@ -159,61 +108,61 @@
 <div id="jobs-results">
   <div class="jobs-board">
     <div class="jobs-board-header">
-      <div class="jobs-board-head jobs-col-type">Type</div>
-      <div class="jobs-board-head jobs-col-order">Order</div>
-      <div class="jobs-board-head jobs-col-product">Product</div>
-      <div class="jobs-board-head jobs-col-job">Job</div>
-      <div class="jobs-board-head jobs-col-workstation">Workstation</div>
-      <div class="jobs-board-head jobs-col-meta">Etc.</div>
+      <div class="jobs-board-head">Type</div>
+      <div class="jobs-board-head">Order</div>
+      <div class="jobs-board-head">Product</div>
+      <div class="jobs-board-head">Job</div>
+      <div class="jobs-board-head">Workstation</div>
+      <div class="jobs-board-head">Status</div>
     </div>
 
     <div class="jobs-board-body">
       {% if jobs %}
         {% for job in jobs %}
-          {% set total_hours = (job.estimated_hours * (job.planned_quantity - job.completed_quantity)) | round(2) %}
-          {% if total_hours < 0 %}{% set total_hours = 0 %}{% endif %}
-          {% set progress_percent = ((job.completed_quantity / job.planned_quantity) * 100) if job.planned_quantity > 0 else 0 %}
-          {% set progress_width = progress_percent if progress_percent < 100 else 100 %}
-          {% set status_class = "" %}
-          {% if job.status == "Waiting" %}
-            {% set status_class = "waiting" %}
+          {% set progress_percent = job.progress_percent if job.progress_percent is not none else 0 %}
+          {% set progress_width = progress_percent if progress_percent <= 100 else 100 %}
+          {% set remaining_qty = job.planned_quantity - job.completed_quantity %}
+          {% if remaining_qty < 0 %}
+            {% set remaining_qty = 0 %}
+          {% endif %}
+          {% set total_hours = (job.estimated_hours * remaining_qty)|round(2) %}
+
+          {% if job.status == "Done" %}
+            {% set status_class = "completed" %}
           {% elif job.status == "Ongoing" %}
             {% set status_class = "in-progress" %}
-          {% elif job.status == "Done" %}
-            {% set status_class = "completed" %}
           {% elif job.status == "Paused" %}
             {% set status_class = "delayed" %}
+          {% else %}
+            {% set status_class = "waiting" %}
           {% endif %}
 
           <article class="job-row-card {% if job.is_split_child %}job-row-split-child{% endif %}">
             <div class="job-row-top">
-              <div class="job-cell jobs-col-type">
+              <div class="job-cell">
                 {% if job.is_split_child %}
-                  <span class="status-badge in-progress">Split Child</span>
-                  <div class="subtle-meta">Parent #{{ job.parent_job_id }}</div>
-                {% elif job.child_count > 0 %}
-                  <span class="status-badge waiting">Split Parent</span>
+                  <span class="status-badge in-progress">Split</span>
                 {% else %}
                   <span class="status-badge completed">Single</span>
                 {% endif %}
               </div>
 
-              <div class="job-cell jobs-col-order">
+              <div class="job-cell">
                 <div class="job-main-value">{{ job.order_number }}</div>
-                <div class="subtle-meta">Due {{ job.due_date }}</div>
+                <div class="subtle-meta">Due {{ job.due_date if job.due_date else "-" }}</div>
               </div>
 
-              <div class="job-cell jobs-col-product">
+              <div class="job-cell">
                 <div class="job-main-value">{{ job.product_name }}</div>
                 <div class="subtle-meta">Seq {{ job.sequence }}</div>
               </div>
 
-              <div class="job-cell jobs-col-job">
+              <div class="job-cell">
                 <div class="job-name-wrap">
                   {% if job.is_split_child %}
                     <span class="job-name-indent">↳ {{ job.job_name }}</span>
                   {% else %}
-                    <span>{{ job.job_name }}</span>
+                    {{ job.job_name }}
                   {% endif %}
                 </div>
 
@@ -231,13 +180,15 @@
                       <form method="POST" action="{{ url_for('update_job_status', job_id=job.id, new_status='Done') }}" class="inline-form">
                         <button type="submit" class="table-action-btn btn-delete job-micro-btn">Done</button>
                       </form>
+
+                      <a href="{{ url_for('new_report') }}?job_id={{ job.id }}" class="table-action-btn btn-neutral job-micro-btn">Report</a>
                     </div>
                   {% endif %}
                 </div>
               </div>
 
               <div class="job-cell jobs-col-workstation">
-                <div class="job-main-value">{{ job.workstation }}</div>
+                <div class="job-main-value">{{ job.workstation_name }}</div>
 
                 {% if job.child_count == 0 %}
                   <div class="custom-dropdown" data-job-id="{{ job.id }}">
@@ -305,7 +256,7 @@
                     <button type="submit" class="table-action-btn btn-neutral job-micro-btn">Update Progress</button>
                   </form>
 
-                  {% if not job.is_split_child and job.child_count == 0 and job.completed_quantity == 0 %}
+                  {% if not job.is_split_child and job.completed_quantity == 0 %}
                     <details class="split-details split-details-compact">
                       <summary>Split job</summary>
                       <form method="POST" action="{{ url_for('split_job', job_id=job.id) }}" class="split-form">
@@ -356,6 +307,30 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
+  function initJobDropdowns() {
+    const dropdowns = document.querySelectorAll(".custom-dropdown");
+
+    dropdowns.forEach(dropdown => {
+      const trigger = dropdown.querySelector(".dropdown-trigger");
+      const menu = dropdown.querySelector(".dropdown-menu");
+
+      if (!trigger || !menu) return;
+
+      trigger.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        document.querySelectorAll(".custom-dropdown.open").forEach(openDropdown => {
+          if (openDropdown !== dropdown) {
+            openDropdown.classList.remove("open");
+          }
+        });
+
+        dropdown.classList.toggle("open");
+      });
+    });
+  }
+
   function syncStatusCheckboxes(changedInput) {
     if (!allInput) return;
 
@@ -386,7 +361,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const url = `${form.action}?${params.toString()}`;
-
     results.classList.add("is-loading");
 
     try {
@@ -422,64 +396,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const debouncedSubmit = debounce(submitLiveForm, 250);
 
-  const allInputs = form.querySelectorAll("input, select");
-
-  allInputs.forEach(input => {
-    if (input.type === "checkbox" || input.type === "date" || input.tagName === "SELECT") {
-      input.addEventListener("change", function () {
-        if (input.name === "status") {
-          syncStatusCheckboxes(input);
-        }
-        submitLiveForm();
-      });
-    }
-
-    if (input.type === "text") {
-      input.addEventListener("input", debouncedSubmit);
-
-      input.addEventListener("keypress", function (e) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submitLiveForm();
-        }
-      });
-    }
+  statusInputs.forEach(input => {
+    input.addEventListener("change", function () {
+      syncStatusCheckboxes(this);
+      submitLiveForm();
+    });
   });
 
-  const anyOtherCheckedOnLoad = otherStatusInputs.some(input => input.checked);
-  if (allInput) {
-    allInput.checked = !anyOtherCheckedOnLoad;
-  }
+  form.querySelectorAll('input[type="text"]').forEach(input => {
+    input.addEventListener("input", debouncedSubmit);
+  });
 
-  function initJobDropdowns() {
-    const dropdowns = document.querySelectorAll(".custom-dropdown");
+  form.querySelectorAll('input[type="date"], select').forEach(input => {
+    input.addEventListener("change", submitLiveForm);
+  });
 
-    dropdowns.forEach(dropdown => {
-      dropdown.addEventListener("click", function (event) {
-        const trigger = event.target.closest(".dropdown-trigger");
-
-        if (!trigger) return;
-
-        event.stopPropagation();
-
-        document.querySelectorAll(".custom-dropdown.open").forEach(openDropdown => {
-          if (openDropdown !== dropdown) {
-            openDropdown.classList.remove("open");
-          }
-        });
-
-        dropdown.classList.toggle("open");
-      });
-    });
-  }
-
-  document.addEventListener("click", function (event) {
-    const dropdowns = document.querySelectorAll(".custom-dropdown");
-
-    dropdowns.forEach(dropdown => {
-      if (!dropdown.contains(event.target)) {
-        dropdown.classList.remove("open");
-      }
+  document.addEventListener("click", function () {
+    document.querySelectorAll(".custom-dropdown.open").forEach(dropdown => {
+      dropdown.classList.remove("open");
     });
   });
 
