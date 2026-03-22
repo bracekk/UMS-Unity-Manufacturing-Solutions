@@ -16,6 +16,14 @@
 </div>
 
 <div class="dashboard-form-card product-form-card">
+  {% if not products %}
+    <div class="flash-wrapper" style="margin-bottom: 18px;">
+      <div class="flash-message flash-error">
+        No products found for your current company. Create a product first, or check if you are logged into the correct company.
+      </div>
+    </div>
+  {% endif %}
+
   <form method="POST" class="order-form">
     <div class="form-grid form-grid-2">
       <div class="form-group">
@@ -25,43 +33,46 @@
 
       <div class="form-group">
         <label>Product</label>
-        <div class="custom-select" data-name="product_id">
-          <div class="custom-select-trigger">
-            <span>
-              {% if products %}
-                {{ products[0][1] }} - {{ products[0][2] }}
-              {% else %}
-                Select product
-              {% endif %}
-            </span>
-          </div>
 
-          <div class="custom-options">
-            {% for product in products %}
-              <div class="custom-option" data-value="{{ product[0] }}">
-                {{ product[1] }} - {{ product[2] }}
-              </div>
-            {% endfor %}
-          </div>
+        {% if products %}
+          <div class="custom-select" data-name="product_id">
+            <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select product">
+              <span>{{ products[0][1] }} - {{ products[0][2] }}</span>
+            </div>
 
-          <input
-            type="hidden"
-            name="product_id"
-            value="{% if products %}{{ products[0][0] }}{% endif %}"
-            {% if not products %}disabled{% endif %}
-          >
-        </div>
+            <div class="custom-options">
+              {% for product in products %}
+                <div class="custom-option" data-value="{{ product[0] }}">
+                  {{ product[1] }} - {{ product[2] }}
+                </div>
+              {% endfor %}
+            </div>
+
+            <input
+              type="hidden"
+              name="product_id"
+              value="{{ products[0][0] }}"
+            >
+          </div>
+        {% else %}
+          <div class="custom-select">
+            <div class="custom-select-trigger is-disabled" aria-disabled="true">
+              <span>No products available</span>
+            </div>
+            <input type="hidden" name="product_id" value="" disabled>
+          </div>
+        {% endif %}
       </div>
 
       <div class="form-group">
         <label for="quantity">Quantity</label>
-        <input type="number" step="0.01" id="quantity" name="quantity" required>
+        <input type="number" step="0.01" id="quantity" name="quantity" required {% if not products %}disabled{% endif %}>
       </div>
 
       <div class="form-group">
         <label>Status</label>
         <div class="custom-select" data-name="status">
-          <div class="custom-select-trigger">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select status">
             <span>Waiting</span>
           </div>
 
@@ -78,13 +89,13 @@
 
       <div class="form-group">
         <label for="due_date">Due Date</label>
-        <input type="date" id="due_date" name="due_date" required>
+        <input type="date" id="due_date" name="due_date" required {% if not products %}disabled{% endif %}>
       </div>
 
       <div class="form-group">
         <label>Priority</label>
         <div class="custom-select" data-name="priority">
-          <div class="custom-select-trigger">
+          <div class="custom-select-trigger" tabindex="0" role="button" aria-label="Select priority">
             <span>Medium</span>
           </div>
 
@@ -101,53 +112,10 @@
 
     <div class="form-actions">
       <a href="{{ url_for('orders') }}" class="dashboard-btn secondary">Cancel</a>
-      <button type="submit" class="dashboard-btn primary">Create Order</button>
+      <button type="submit" class="dashboard-btn primary" {% if not products %}disabled{% endif %}>
+        Create Order
+      </button>
     </div>
   </form>
 </div>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const customSelects = document.querySelectorAll(".custom-select");
-
-  customSelects.forEach(select => {
-    const trigger = select.querySelector(".custom-select-trigger");
-    const triggerText = trigger.querySelector("span");
-    const options = select.querySelectorAll(".custom-option");
-    const hiddenInput = select.querySelector('input[type="hidden"]');
-
-    trigger.addEventListener("click", function (e) {
-      e.stopPropagation();
-
-      customSelects.forEach(otherSelect => {
-        if (otherSelect !== select) {
-          otherSelect.classList.remove("open");
-        }
-      });
-
-      select.classList.toggle("open");
-    });
-
-    options.forEach(option => {
-      option.addEventListener("click", function (e) {
-        e.stopPropagation();
-
-        const value = option.dataset.value;
-        const text = option.textContent.trim();
-
-        triggerText.textContent = text;
-        hiddenInput.value = value;
-
-        select.classList.remove("open");
-      });
-    });
-  });
-
-  document.addEventListener("click", function () {
-    customSelects.forEach(select => {
-      select.classList.remove("open");
-    });
-  });
-});
-</script>
 {% endblock %}
